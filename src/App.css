@@ -1,0 +1,5 @@
+/* Estilo para o container principal */
+#root {
+  padding-top: 60px; /* Mesma altura da barra superior */
+  min-height: 100vh;
+}
