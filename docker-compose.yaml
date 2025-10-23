@@ -1,0 +1,11 @@
+services:
+  postgres:
+    image: 'postgres:16'
+    environment:
+      - 'POSTGRES_DB=mintaether-postgres-v1'
+      - 'POSTGRES_PASSWORD=devpassword'
+      - 'POSTGRES_USER=admin'
+    ports:
+      - '5433'
+    volumes:
+      - './postgres-data:/var/lib/postgresql/data'
