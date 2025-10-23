@@ -1,5 +1,5 @@
-import React from 'react';
 import styled from 'styled-components';
+import LogoImg from '../../../assets/logo.png'
 
 const LogoContainer = styled.div`
    display: flex;
@@ -18,7 +18,7 @@ const Logo = () => {
 
     return (
         <LogoContainer>
-            <img src="src/assets/logo.png" alt="Logo" />
+            <img src={LogoImg} alt="Logo" />
         </LogoContainer>
     );
 };
