@@ -4,12 +4,12 @@ import styled from 'styled-components';
 const LogoContainer = styled.div`
    display: flex;
    align-items: center;
-   padding: 0;
+   padding: 0 20px;
    margin: 0;
    line-height: 0; /* Remove espaço extra da linha */
     img {
-       max-width: 15%;
-       height: auto;
+       width: auto;
+       height: 80px;
        display: block; /* Remove espaço extra da imagem */
     }
 `;

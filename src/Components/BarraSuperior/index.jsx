@@ -8,7 +8,7 @@ const BarraEstilizada = styled.header`
    top: 0;  
    left: 0;
    right: 0;
-   height: 60px;
+   height: 80px;
    background-color: rgba(20, 20, 21, 1);
    display: flex;
    align-items: center;
@@ -18,12 +18,16 @@ const BarraEstilizada = styled.header`
    z-index: 1000;
    gap: 0;
 `
+const Spacer = styled.div`
+  flex-grow: 1;
+`
 
 const BarraSuperior = () => {
   return (
     <BarraEstilizada>
       <Logo />
       <BarraDePesquisa />
+      <Spacer /> {/* Quando criar seus componentes de perfil e carteira */}
     </BarraEstilizada>
   )
 }
