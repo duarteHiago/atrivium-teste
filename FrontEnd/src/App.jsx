@@ -4,22 +4,159 @@ import styled from 'styled-components'
 import BarraSuperior from './Components/BarraSuperior';
 import BarraLateral from './Components/BarraLateral';
 
-const MainContent = styled.main`
-padding-top: 80px;
-padding-left: 20px;
+// 1. Importe os novos componentes
+import Modal from './Components/Modal/Modal';
+import LoginModal from './Components/LoginModal/LoginModal';
+import WalletModal from './Components/WalletModal/WalletModal';
+import ProfileDropdown from './Components/ProfileDropdown/ProfileDropdown';
+
+// 2. ATUALIZE OS ESTILOS PARA O EFEITO DE BLUR
+// Adiciona 'filter' e 'transition' quando um modal está aberto
+const PageContainer = styled.div`
+  filter: ${props => props.$isModalOpen ? 'blur(4px)' : 'none'}; 
+  transition: filter 0.2s ease-out;
 `;
+
+const MainContent = styled.main`
+  padding-top: 80px;
+  transition: padding-left 0.3s ease-in-out;
+  padding-left: ${props => props.$isSidebarOpen ? '260px' : '0'};
+`;
+
+// ... (Componentes de Layout: HeroSection, Section, NftCard, etc...)
+const HeroSection = styled.section`
+  padding: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+`;
+
+const HeroPlaceholder = styled.div`
+  height: 400px;
+  width: 100%;
+  border-radius: 12px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 1.5em;
+  font-weight: 500;
+`;
+
+const Section = styled.section`
+  padding: 32px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+`;
+
+const SectionTitle = styled.h2`
+  font-size: 1.5em;
+  font-weight: 600;
+  margin-top: 0;
+  margin-bottom: 20px;
+`;
+
+const CardRow = styled.div`
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  padding-bottom: 15px;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+`;
+
+const NftCard = styled.div`
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background-color: rgba(30, 30, 31, 1);
+  min-width: 280px;
+  max-width: 280px;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+  &:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  }`
+
+const CardImagePlaceholder = styled.div`
+  width: 100%;
+  height: 250px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+`
+const CardInfo = styled.div`
+  padding: 16px;
+`
+const PlaceholderText = styled.div`
+  background-color: rgba(255, 255, 255, 0.2);
+  height: ${props => props.height || '20px'};
+  border-radius: 4px;
+  margin-bottom: 10px;
+  width: ${props => props.width || '80%'};
+`
+
 
 function App() {
 
+  // --- NOVOS ESTADOS GLOBAIS ---
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false); // Estamos logados?
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false); // Modal de login
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false); // Modal de carteira
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false); // Menu do perfil
+  
   const menuRef = useRef(null);
   const sidebarRef = useRef(null);
+  
+  // Variável para o efeito de blur
+  const isAnyModalOpen = isLoginModalOpen || isWalletModalOpen;
+
+  // --- NOVAS FUNÇÕES HANDLER ---
 
   const toggleSidebar = () => {
+    closeAllModals()
     setIsSidebarOpen(!isSidebarOpen);
+  };
+  
+  const closeAllModals = () => {
+    setIsLoginModalOpen(false);
+    setIsWalletModalOpen(false);
+    setIsProfileDropdownOpen(false);
   }
+  
+  // Lógica do botão de Perfil
+  const handleProfileClick = () => {
+    closeAllModals()
+    if (isLoggedIn) {
+      setIsProfileDropdownOpen(!isProfileDropdownOpen); // Abre o dropdown
+    } else {
+      setIsLoginModalOpen(true); // Abre o modal de login
+    }
+  };
 
-  // Close sidebar when clicking outside menu button and sidebar
+  // Lógica do botão de Carteira
+  const handleWalletClick = () => {
+    closeAllModals()
+    setIsWalletModalOpen(true); // Abre o modal de carteira
+  };
+  
+  // Lógica de Login (simulada)
+  const handleLoginSuccess = () => {
+    setIsLoggedIn(true);
+    setIsLoginModalOpen(false);
+  };
+  
+  // Lógica de Logout
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setIsProfileDropdownOpen(false);
+  };
+
+  // Lógica para fechar a sidebar
   useEffect(() => {
     if (!isSidebarOpen) return;
     const onDocClick = (e) => {
@@ -34,19 +171,85 @@ function App() {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [isSidebarOpen]);
 
+  const placeholderItems = [1, 2, 3, 4, 5];
+
   return (
     <>
-      {/* 4. Passe a função para a BarraSuperior */}
-  <BarraSuperior onMenuClick={toggleSidebar} isOpen={isSidebarOpen} menuRef={menuRef} />
+      {/* 3. Renderiza os Modais (eles ficam escondidos por padrão) */}
+      <Modal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)}>
+        <LoginModal onLoginSuccess={handleLoginSuccess} />
+      </Modal>
 
-      {/* 5. Passe o estado para a BarraLateral */}
-  <BarraLateral isOpen={isSidebarOpen} sidebarRef={sidebarRef} />
+      <Modal isOpen={isWalletModalOpen} onClose={() => setIsWalletModalOpen(false)}>
+        <WalletModal />
+      </Modal>
+      
+      {/* O Dropdown do Perfil (não usa o Modal, é um menu simples) */}
+      {isLoggedIn && isProfileDropdownOpen && (
+        <ProfileDropdown onLogout={handleLogout} />
+      )}
+      
+      {/* 4. Aplica o blur no container da página */}
+      <PageContainer $isModalOpen={isAnyModalOpen}>
+        <BarraSuperior 
+          onMenuClick={toggleSidebar} 
+          $isOpen={isSidebarOpen}
+          menuRef={menuRef}
+          isLoggedIn={isLoggedIn}
+          onWalletClick={handleWalletClick}
+          onProfileClick={handleProfileClick}
+        />
+        <BarraLateral $isOpen={isSidebarOpen} sidebarRef={sidebarRef} />
 
-      {/* 6. Envolva seu conteúdo para estilização */}
-      <MainContent isSidebarOpen={isSidebarOpen}>
-        <h1>Welcome to Artrivium NFT</h1>
-        {/* O resto do seu site virá aqui */}
-      </MainContent>
+        <MainContent $isSidebarOpen={isSidebarOpen}>
+          {/* ... (Todo o seu conteúdo da página Discover) ... */}
+          <HeroSection>
+            <HeroPlaceholder>NFTs em Destaque (Carrossel)</HeroPlaceholder>
+          </HeroSection>
+          <Section>
+            <SectionTitle>Coleções em Destaque</SectionTitle>
+            <CardRow>
+              {placeholderItems.map((item) => (
+                <NftCard key={item}>
+                  <CardImagePlaceholder />
+                  <CardInfo>
+                    <PlaceholderText width="60%" />
+                    <PlaceholderText width="40%" height="16px" />
+                  </CardInfo>
+                </NftCard>
+              ))}
+            </CardRow>
+          </Section>
+          <Section>
+            <SectionTitle>Trending Tokens</SectionTitle>
+             <CardRow>
+              {placeholderItems.map((item) => (
+                <NftCard key={item}>
+                  <CardImagePlaceholder />
+                  <CardInfo>
+                    <PlaceholderText width="60%" />
+                    <PlaceholderText width="40%" height="16px" />
+                  </CardInfo>
+                </NftCard>
+              ))}
+            </CardRow>
+          </Section>
+          <Section>
+            <SectionTitle>Featured Drops</SectionTitle>
+             <CardRow>
+              {placeholderItems.map((item) => (
+                <NftCard key={item}>
+                  <CardImagePlaceholder />
+                  <CardInfo>
+                    <PlaceholderText width="60%" />
+                    <PlaceholderText width="40%" height="16px" />
+                  </CardInfo>
+                </NftCard>
+              ))}
+            </CardRow>
+          </Section>
+        </MainContent>
+      </PageContainer>
     </>
   )
 }

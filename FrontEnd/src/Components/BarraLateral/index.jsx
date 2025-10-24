@@ -3,19 +3,19 @@ import styled from 'styled-components';
 
 const NavContainer = styled.nav`
   position: fixed;
-  top: 60px; /* Abaixo da BarraSuperior */
+  top: 80px; /* AJUSTE: Mudei de 60px para 80px para corresponder à altura da BarraSuperior */
   left: 0;
-  height: calc(100vh - 60px); /* Altura total menos a barra superior */
-  width: 260px; /* Largura da barra */
-  background-color: rgba(20, 20, 21, 1); /* Fundo escuro */
+  height: calc(100vh - 80px); /* AJUSTE: Mudei de 60px para 80px */
+  width: 260px;
+  background-color: rgba(20, 20, 21, 1);
   border-right: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
-  z-index: 900; /* Abaixo da barra superior (1000) mas acima do resto */
+  z-index: 900;
   
   padding: 20px 0;
   
-  /* A mágica da animação */
-  transform: ${props => props.isOpen ? 'translateX(0)' : 'translateX(-100%)'};
+  /* 1. ADICIONE O $ AQUI */
+  transform: ${props => props.$isOpen ? 'translateX(0)' : 'translateX(-100%)'};
   transition: transform 0.3s ease-in-out;
 `;
 
@@ -31,22 +31,19 @@ const MenuItem = styled.a`
   &:hover {
     background-color: rgba(255, 255, 255, 0.1);
   }
-  /* Adicionar espaço para ícones depois */
-  /* svg { margin-right: 15px; } */
 `;
 
-// 1. O componente recebe 'isOpen'
-const BarraLateral = ({ isOpen, sidebarRef }) => {
+// 2. RECEBA A PROP COM $
+const BarraLateral = ({ $isOpen, sidebarRef }) => {
   return (
-    // 2. O 'isOpen' é passado para o styled-component
-    <NavContainer ref={sidebarRef} isOpen={isOpen}>
-      {/* Itens de menu inspirados no OpenSea */}
+    // 3. PASSE A PROP COM $
+    <NavContainer ref={sidebarRef} $isOpen={$isOpen}>
       <MenuItem href="#">Discover</MenuItem>
       <MenuItem href="#">Collections</MenuItem>
       <MenuItem href="#">Tokens</MenuItem>
       <MenuItem href="#">Drops</MenuItem>
       <MenuItem href="#">Activity</MenuItem>
-      {/* Adicione mais itens... */}
+      <MenuItem href="#">Profile</MenuItem> 
     </NavContainer>
   );
 };
