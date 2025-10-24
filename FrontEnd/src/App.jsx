@@ -6,7 +6,7 @@ import BarraLateral from './Components/BarraLateral';
 
 // 1. Importe os novos componentes
 import Modal from './Components/Modal/Modal';
-import LoginModal from './Components/LoginModal/LoginModal';
+import AuthModal from './Components/AuthModal/AuthModal';
 import WalletModal from './Components/WalletModal/WalletModal';
 import ProfileDropdown from './Components/ProfileDropdown/ProfileDropdown';
 
@@ -105,7 +105,7 @@ function App() {
   // --- NOVOS ESTADOS GLOBAIS ---
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false); // Estamos logados?
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false); // Modal de login
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false); // Modal de carteira
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false); // Menu do perfil
   
@@ -113,7 +113,7 @@ function App() {
   const sidebarRef = useRef(null);
   
   // Variável para o efeito de blur
-  const isAnyModalOpen = isLoginModalOpen || isWalletModalOpen;
+  const isAnyModalOpen = isAuthModalOpen || isWalletModalOpen;
 
   // --- NOVAS FUNÇÕES HANDLER ---
 
@@ -123,7 +123,7 @@ function App() {
   };
   
   const closeAllModals = () => {
-    setIsLoginModalOpen(false);
+    setIsAuthModalOpen(false);
     setIsWalletModalOpen(false);
     setIsProfileDropdownOpen(false);
   }
@@ -134,7 +134,7 @@ function App() {
     if (isLoggedIn) {
       setIsProfileDropdownOpen(!isProfileDropdownOpen); // Abre o dropdown
     } else {
-      setIsLoginModalOpen(true); // Abre o modal de login
+      setIsAuthModalOpen(true); // Abre o modal de login
     }
   };
 
@@ -145,9 +145,9 @@ function App() {
   };
   
   // Lógica de Login (simulada)
-  const handleLoginSuccess = () => {
+  const handleAuthSuccess = () => {
     setIsLoggedIn(true);
-    setIsLoginModalOpen(false);
+    setIsAuthModalOpen(false)
   };
   
   // Lógica de Logout
@@ -176,8 +176,8 @@ function App() {
   return (
     <>
       {/* 3. Renderiza os Modais (eles ficam escondidos por padrão) */}
-      <Modal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)}>
-        <LoginModal onLoginSuccess={handleLoginSuccess} />
+      <Modal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)}> {/* ADICIONE ESTE BLOCO */}
+        <AuthModal onAuthSuccess={handleAuthSuccess} />
       </Modal>
 
       <Modal isOpen={isWalletModalOpen} onClose={() => setIsWalletModalOpen(false)}>

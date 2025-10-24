@@ -19,13 +19,15 @@ const ModalContainer = styled.div`
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background-color: #1c1c1e; /* Cor escura do modal */
+  background-color: rgba(28, 28, 30, 0.85); /* Cor escura do modal */
   border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   z-index: 2000; /* Acima do backdrop */
   min-width: 400px;
   max-height: 90vh;
   overflow-y: auto;
+  overflow-x: hidden;
 `;
 
 // Botão 'X' para fechar
@@ -39,6 +41,7 @@ const CloseButton = styled.button`
   font-size: 1.5rem;
   cursor: pointer;
   line-height: 1;
+  z-index: 10;
 `;
 
 const Modal = ({ isOpen, onClose, children }) => {
