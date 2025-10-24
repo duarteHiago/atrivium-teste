@@ -3,6 +3,8 @@ import './App.css'
 import styled from 'styled-components'
 import BarraSuperior from './Components/BarraSuperior';
 import BarraLateral from './Components/BarraLateral';
+import Cms from './Components/Cms/Cms';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 
 // 1. Importe os novos componentes
 import Modal from './Components/Modal/Modal';
@@ -105,6 +107,7 @@ function App() {
   // --- NOVOS ESTADOS GLOBAIS ---
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false); // Estamos logados?
+  const [isAdmin, setIsAdmin] = useState(false); // FLAG simples enquanto não há sistema de usuários
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false); // Modal de login
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false); // Modal de carteira
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false); // Menu do perfil
@@ -156,6 +159,26 @@ function App() {
     setIsProfileDropdownOpen(false);
   };
 
+  // Router navigation (usado por openCms)
+  const navigate = useNavigate();
+
+  // Função para abrir a rota /admin — só navega se for admin
+  const openCms = () => {
+    closeAllModals();
+    if (isAdmin) navigate('/admin');
+  }
+
+  // Função para fechar CMS — volta para a raiz
+  const closeCms = () => {
+    navigate('/');
+  }
+
+  // Função para ir para a home (página principal)
+  const goHome = () => {
+    closeAllModals();
+    navigate('/');
+  }
+
   // Lógica para fechar a sidebar
   useEffect(() => {
     if (!isSidebarOpen) return;
@@ -198,56 +221,65 @@ function App() {
           isLoggedIn={isLoggedIn}
           onWalletClick={handleWalletClick}
           onProfileClick={handleProfileClick}
+          isAdmin={isAdmin}
+          setIsAdmin={setIsAdmin}
         />
-        <BarraLateral $isOpen={isSidebarOpen} sidebarRef={sidebarRef} />
+        <BarraLateral $isOpen={isSidebarOpen} sidebarRef={sidebarRef} onOpenCms={openCms} isAdmin={isAdmin} onGoHome={goHome} />
 
         <MainContent $isSidebarOpen={isSidebarOpen}>
-          {/* ... (Todo o seu conteúdo da página Discover) ... */}
-          <HeroSection>
-            <HeroPlaceholder>NFTs em Destaque (Carrossel)</HeroPlaceholder>
-          </HeroSection>
-          <Section>
-            <SectionTitle>Coleções em Destaque</SectionTitle>
-            <CardRow>
-              {placeholderItems.map((item) => (
-                <NftCard key={item}>
-                  <CardImagePlaceholder />
-                  <CardInfo>
-                    <PlaceholderText width="60%" />
-                    <PlaceholderText width="40%" height="16px" />
-                  </CardInfo>
-                </NftCard>
-              ))}
-            </CardRow>
-          </Section>
-          <Section>
-            <SectionTitle>Trending Tokens</SectionTitle>
-             <CardRow>
-              {placeholderItems.map((item) => (
-                <NftCard key={item}>
-                  <CardImagePlaceholder />
-                  <CardInfo>
-                    <PlaceholderText width="60%" />
-                    <PlaceholderText width="40%" height="16px" />
-                  </CardInfo>
-                </NftCard>
-              ))}
-            </CardRow>
-          </Section>
-          <Section>
-            <SectionTitle>Featured Drops</SectionTitle>
-             <CardRow>
-              {placeholderItems.map((item) => (
-                <NftCard key={item}>
-                  <CardImagePlaceholder />
-                  <CardInfo>
-                    <PlaceholderText width="60%" />
-                    <PlaceholderText width="40%" height="16px" />
-                  </CardInfo>
-                </NftCard>
-              ))}
-            </CardRow>
-          </Section>
+          <Routes>
+            <Route path="/admin" element={<Cms onClose={closeCms} />} />
+            <Route path="/" element={(
+              <>
+                {/* ... (Todo o seu conteúdo da página Discover) ... */}
+                <HeroSection>
+                  <HeroPlaceholder>NFTs em Destaque (Carrossel)</HeroPlaceholder>
+                </HeroSection>
+                <Section>
+                  <SectionTitle>Coleções em Destaque</SectionTitle>
+                  <CardRow>
+                    {placeholderItems.map((item) => (
+                      <NftCard key={item}>
+                        <CardImagePlaceholder />
+                        <CardInfo>
+                          <PlaceholderText width="60%" />
+                          <PlaceholderText width="40%" height="16px" />
+                        </CardInfo>
+                      </NftCard>
+                    ))}
+                  </CardRow>
+                </Section>
+                <Section>
+                  <SectionTitle>Trending Tokens</SectionTitle>
+                   <CardRow>
+                    {placeholderItems.map((item) => (
+                      <NftCard key={item}>
+                        <CardImagePlaceholder />
+                        <CardInfo>
+                          <PlaceholderText width="60%" />
+                          <PlaceholderText width="40%" height="16px" />
+                        </CardInfo>
+                      </NftCard>
+                    ))}
+                  </CardRow>
+                </Section>
+                <Section>
+                  <SectionTitle>Featured Drops</SectionTitle>
+                   <CardRow>
+                    {placeholderItems.map((item) => (
+                      <NftCard key={item}>
+                        <CardImagePlaceholder />
+                        <CardInfo>
+                          <PlaceholderText width="60%" />
+                          <PlaceholderText width="40%" height="16px" />
+                        </CardInfo>
+                      </NftCard>
+                    ))}
+                  </CardRow>
+                </Section>
+              </>
+            )} />
+          </Routes>
         </MainContent>
       </PageContainer>
     </>

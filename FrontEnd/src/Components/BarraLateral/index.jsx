@@ -12,6 +12,9 @@ const NavContainer = styled.nav`
   box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
   z-index: 900;
   
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   padding: 20px 0;
   
   /* 1. ADICIONE O $ AQUI */
@@ -25,6 +28,7 @@ const MenuItem = styled.a`
   padding: 14px 24px;
   color: white;
   text-decoration: none;
+  cursor: pointer;
   font-size: 1.1em;
   font-weight: 500;
   
@@ -33,17 +37,81 @@ const MenuItem = styled.a`
   }
 `;
 
+// Texto simples (sem fundo) — usado para o item Discover quando deve aparecer como texto
+const MenuText = styled.button`
+  display: flex;
+  align-items: center;
+  padding: 14px 24px;
+  color: white;
+  background: transparent;
+  border: none;
+  text-decoration: none;
+  font-size: 1.1em;
+  font-weight: 500;
+  cursor: pointer;
+
+  &:hover {
+    background: transparent;
+    text-decoration: underline;
+  }
+`;
+
+const AdminButton = styled.button`
+  display: flex;
+  align-items: center;
+  padding: 20px 24px;
+  color: white;
+  background: transparent;
+  border: none;
+  width: 100%;
+  font-size: 1.1em;
+  font-weight: 500;
+  text-align: left;
+
+  ${props => props.disabled ? `
+    opacity: 0.45;
+    cursor: not-allowed;
+  ` : `
+    cursor: pointer;
+    &:hover { background-color: rgba(255, 255, 255, 0.1); }
+  `}
+`;
+
+const MenuList = styled.div`
+  display: flex;
+  flex-direction: column;
+`;
+
+const Footer = styled.div`
+  padding: 12px 0 8px 0;
+`;
+
 // 2. RECEBA A PROP COM $
-const BarraLateral = ({ $isOpen, sidebarRef }) => {
+// Recebe também uma prop para abrir a aba CMS e o flag isAdmin
+const BarraLateral = ({ $isOpen, sidebarRef, onOpenCms, isAdmin = false, onGoHome }) => {
   return (
     // 3. PASSE A PROP COM $
     <NavContainer ref={sidebarRef} $isOpen={$isOpen}>
-      <MenuItem href="#">Discover</MenuItem>
-      <MenuItem href="#">Collections</MenuItem>
-      <MenuItem href="#">Tokens</MenuItem>
-      <MenuItem href="#">Drops</MenuItem>
-      <MenuItem href="#">Activity</MenuItem>
-      <MenuItem href="#">Profile</MenuItem> 
+      <MenuList>
+        <MenuText onClick={() => { if (typeof onGoHome === 'function') onGoHome(); }}>Discover</MenuText>
+        <MenuItem href="#">Collections</MenuItem>
+        <MenuItem href="#">Tokens</MenuItem>
+        <MenuItem href="#">Drops</MenuItem>
+        <MenuItem href="#">Activity</MenuItem>
+        <MenuItem href="#">Profile</MenuItem>
+      </MenuList>
+
+      {/* Footer com o botão CMS fixo na parte de baixo */}
+      <Footer>
+        <div style={{ marginTop: 6, borderTop: '1px solid rgba(255,255,255,0.04)' }} />
+        <AdminButton
+          onClick={() => { if (isAdmin && typeof onOpenCms === 'function') onOpenCms(); }}
+          disabled={!isAdmin}
+          title={isAdmin ? 'Abrir CMS' : 'Acesso restrito a administradores'}
+        >
+          CMS — Gerenciamento
+        </AdminButton>
+      </Footer>
     </NavContainer>
   );
 };

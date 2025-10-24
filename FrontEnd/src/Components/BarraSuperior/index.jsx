@@ -96,13 +96,26 @@ const ProfileButton = styled.button`
   }
 `;
 
+const AdminToggle = styled.button`
+  background: ${props => props.active ? '#9be3b8' : 'transparent'};
+  border: 1px solid rgba(255,255,255,0.08);
+  color: ${props => props.active ? 'rgba(0,0,0,0.8)' : 'white'};
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+`;
+
 const BarraSuperior = ({
   onMenuClick, 
   $isOpen, // Recebe com $
   menuRef, 
   isLoggedIn, 
   onWalletClick, 
-  onProfileClick
+  onProfileClick,
+  isAdmin,
+  setIsAdmin
 }) => {
   
   const [hovered, setHovered] = useState(false);
@@ -137,6 +150,14 @@ const BarraSuperior = ({
       <Spacer /> 
       
       <HeaderButtonGroup>
+        {/* Toggle dev-only para simular admin (não afeta backend) */}
+        <AdminToggle
+          active={isAdmin}
+          onClick={() => setIsAdmin && setIsAdmin(v => !v)}
+          title="Alternar admin (dev)"
+        >
+          {isAdmin ? 'ADMIN' : 'dev'}
+        </AdminToggle>
         <WalletButton onClick={onWalletClick}>
           Connect Wallet
         </WalletButton>
