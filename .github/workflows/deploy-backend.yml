@@ -1,7 +1,12 @@
-name: Criar .env do Backend
+name: Create Backend ENV
 
 on:
-  workflow_dispatch: {} # Permite rodar manualmente quando quiser
+  workflow_dispatch:
+  push:
+    branches: [ master, dev-hiago ]
+    paths:
+      - '.github/workflows/**'
+      - 'BackEnd/**'
 
 jobs:
   create-env:
