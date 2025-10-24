@@ -108,7 +108,7 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false); // Estamos logados?
   const [isAdmin, setIsAdmin] = useState(false); // FLAG simples enquanto não há sistema de usuários
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false); // Modal de login
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false); // Modal de autenticação
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false); // Modal de carteira
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false); // Menu do perfil
   
@@ -116,7 +116,7 @@ function App() {
   const sidebarRef = useRef(null);
   
   // Variável para o efeito de blur
-  const isAnyModalOpen = isAuthModalOpen || isWalletModalOpen;
+  const isAnyModalOpen = isLoginModalOpen || isWalletModalOpen;
 
   // --- NOVAS FUNÇÕES HANDLER ---
 
@@ -126,7 +126,7 @@ function App() {
   };
   
   const closeAllModals = () => {
-    setIsAuthModalOpen(false);
+    setIsLoginModalOpen(false);
     setIsWalletModalOpen(false);
     setIsProfileDropdownOpen(false);
   }
@@ -137,7 +137,7 @@ function App() {
     if (isLoggedIn) {
       setIsProfileDropdownOpen(!isProfileDropdownOpen); // Abre o dropdown
     } else {
-      setIsAuthModalOpen(true); // Abre o modal de login
+      setIsLoginModalOpen(true); // Abre o modal de login
     }
   };
 
@@ -148,9 +148,9 @@ function App() {
   };
   
   // Lógica de Login (simulada)
-  const handleAuthSuccess = () => {
+  const handleLoginSuccess = () => {
     setIsLoggedIn(true);
-    setIsAuthModalOpen(false)
+    setIsLoginModalOpen(false)
   };
   
   // Lógica de Logout
@@ -199,8 +199,8 @@ function App() {
   return (
     <>
       {/* 3. Renderiza os Modais (eles ficam escondidos por padrão) */}
-      <Modal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)}> {/* ADICIONE ESTE BLOCO */}
-        <AuthModal onAuthSuccess={handleAuthSuccess} />
+      <Modal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)}> {/* ADICIONE ESTE BLOCO */}
+        <AuthModal onAuthSuccess={handleLoginSuccess} />
       </Modal>
 
       <Modal isOpen={isWalletModalOpen} onClose={() => setIsWalletModalOpen(false)}>
