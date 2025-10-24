@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import styled from 'styled-components'
 import Logo from './Logo'
 import BarraDePesquisa from './BarraDePesquisa'
@@ -26,7 +26,6 @@ const MenuButton = styled.button`
   background: transparent;
   border: none;
   cursor: pointer;
-  /* make the button area larger so any click inside the 3-bars area toggles */
   width: 48px;
   height: 44px;
   padding: 0;
@@ -35,7 +34,6 @@ const MenuButton = styled.button`
   justify-content: center;
   position: relative;
 
-  /* center the bars and keep pseudo elements inside the button box */
   .bar {
     width: 20px;
     height: 2px;
@@ -51,20 +49,68 @@ const MenuButton = styled.button`
     left: 0;
     width: 20px;
     height: 2px;
-    background-color: inherit; /* match the middle bar color */
+    background-color: inherit;
     transition: width 0.18s ease, transform 0.18s ease;
   }
   .bar::before { transform: translateY(-8px); }
   .bar::after { transform: translateY(8px); }
-  `
+`
 
-const BarraSuperior = ({onMenuClick, isOpen, menuRef}) => {
+const HeaderButtonGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding-right: 20px;
+`;
+
+const WalletButton = styled.button`
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+`;
+
+const ProfileButton = styled.button`
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+`;
+
+const BarraSuperior = ({
+  onMenuClick, 
+  $isOpen, // Recebe com $
+  menuRef, 
+  isLoggedIn, 
+  onWalletClick, 
+  onProfileClick
+}) => {
+  
   const [hovered, setHovered] = useState(false);
-  // ensure hover state resets when menu is closed (e.g., clicking outside)
+  
   useEffect(() => {
-    if (!isOpen) setHovered(false);
-  }, [isOpen]);
-  // color that matches the logo — adjust or compute if needed
+    if (!$isOpen) setHovered(false); // Usa com $
+  }, [$isOpen]); // Usa com $
+  
   const activeColor = '#9be3b8';
 
   return (
@@ -80,15 +126,24 @@ const BarraSuperior = ({onMenuClick, isOpen, menuRef}) => {
           className="bar"
           style={{
             width: hovered ? 26 : 20,
-            backgroundColor: isOpen || hovered ? activeColor : 'white',
+            backgroundColor: $isOpen || hovered ? activeColor : 'white', // Usa com $
           }}
         />
       </MenuButton>
-      <div style={{ marginLeft: -14 /* bring logo closer to button */ }}>
+      <div style={{ marginLeft: -14 }}>
         <Logo />
       </div>
       <BarraDePesquisa />
-      <Spacer /> {/* Quando criar seus componentes de perfil e carteira */}
+      <Spacer /> 
+      
+      <HeaderButtonGroup>
+        <WalletButton onClick={onWalletClick}>
+          Connect Wallet
+        </WalletButton>
+        <ProfileButton onClick={onProfileClick}>
+          {isLoggedIn ? '👤' : '🚪'} {/* Usa isLoggedIn */}
+        </ProfileButton>
+      </HeaderButtonGroup>
     </BarraEstilizada>
   )
 }

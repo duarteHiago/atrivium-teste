@@ -1,147 +1,157 @@
-# Projeto Artrivium — FrontEnd (React + Vite)
+# Artrivium - E-Commerce de NFT com Geração por IA
 
-Este repositório contém o front-end do projeto Artrivium, criado com Vite + React. Este README traz instruções completas em português (pt-BR) para configurar, desenvolver e executar o projeto localmente, além de executar o banco Postgres via Docker para desenvolvimento.
+O **Artrivium** é uma aplicação web moderna desenvolvida como projeto acadêmico. O sistema combina tecnologias web (React, Node.js) com inteligência artificial para geração automática de imagens exclusivas, que são tokenizadas em NFTs e comercializadas dentro da própria plataforma.
 
-## Sumário
+A plataforma oferecerá um ciclo completo para o artista digital:
 
-- Visão geral
-- Pré-requisitos
-- Configuração rápida (desenvolvimento)
-- Scripts disponíveis
-- Banco de dados com Docker (Postgres)
-- Variáveis/Configurações importantes
-- Debugging e troubleshooting
-- Build e deploy
-- Contribuindo
+* **Criação:** Uma interface intuitiva onde qualquer pessoa, independentemente da habilidade técnica, pode descrever uma ideia (prompt) e ver a IA transformá-la em uma imagem digital.
+* **Tokenização (Minting):** A capacidade de transformar a arte gerada em um Token Não Fungível (NFT) em uma blockchain, garantindo autenticidade e propriedade.
+* **Comercialização:** Um marketplace integrado onde os criadores podem listar seus NFTs para venda e colecionadores podem adquirir obras únicas.
 
----
+## 2. Tecnologias Utilizadas
 
-## Visão geral
+A arquitetura do projeto foi desenhada utilizando um stack de tecnologias modernas, robustas e escaláveis, separando as responsabilidades entre o backend, o frontend e a infraestrutura.
 
-O front-end usa React (v19) com Vite (configurado para o runtime JSX automático) e styled-components para estilos. O projeto foi preparado para desenvolvimento local com HMR (hot-reload).
+| Categoria | Tecnologia |
+| :--- | :--- |
+| **Frontend** | React (Vite), JavaScript, HTML5, CSS3, Styled-Components |
+| **Backend (Planejado)** | Node.js (Express/NestJS), TypeScript, API REST |
+| **Banco de Dados** | PostgreSQL |
+| **Infraestrutura** | Docker, Docker Compose |
+| **Blockchain (Planejado)**| Solidity (Smart Contracts), Ethers.js |
+| **Geração de Arte (Planejado)**| Integração com APIs de IA (ex: OpenAI DALL-E) |
+| **Segurança (Planejado)** | Autenticação (JWT), Gerenciamento de Chaves |
 
-Estrutura principal (diretório `FrontEnd`):
+## 3. Status Atual do Projeto
 
-- `src/` - código-fonte do React
-- `public/` - assets públicos
-- `package.json` - scripts e dependências
-- `vite.config.js` - configuração do Vite
+O projeto está em desenvolvimento ativo e organizado em fases:
 
-## Pré-requisitos
+-   [x] **Fase 1: Configuração do Ambiente** - Estrutura do monorepo (Frontend, Backend, DataBase, Docker) e setup do container PostgreSQL com Docker Compose.
+-   [x] **Fase 2: Frontend (em andamento)** - Construção da interface de usuário base com React (Barra Superior, Barra Lateral, Logo).
+-   [ ] **Fase 3: Backend (API)** - Desenvolvimento das entidades, repositórios e endpoints REST com Node.js.
+-   [ ] **Fase 4: Integração com IA** - Conexão com API para geração de imagens.
+-   [ ] **Fase 5: Integração com Blockchain** - Implementação de smart contracts e minting.
 
-- Node.js (recomenda-se LTS). Baixe em https://nodejs.org/ ou instale com `winget` no Windows:
+## 4. Arquitetura Planejada
 
-```powershell
-winget install OpenJS.NodeJS.LTS -e
+A arquitetura planejada segue um modelo de serviços desacoplados para garantir escalabilidade.
+
+```
++----------------+       +------------------+       +------------------------+
+|                |       |                  |       |                        |
+|   Frontend     |-----> |   API Gateway    |-----> |   Backend Principal    |
+|   (React)      |       | (e.g., NGINX)    |       |   (Node.js)            |
+|                |       |                  |       |                        |
++----------------+       +--------+---------+       +-----------+------------+
+                                  |                             |
+                                  |                             |
+         +------------------------+-------------------------+
+         |                        |                         |
++--------v----------+  +---------v---------+  +------------v----------+
+|                   |  |                   |  |                       |
+|   Serviço de IA   |  |  Banco de Dados   |  |  Serviço Blockchain   |
+|  (API Externa)    |  |  (PostgreSQL)     |  | (Nó / Smart Contract) |
+|                   |  |                   |  |                       |
++-------------------+  +-------------------+  +-----------------------+
 ```
 
-- npm (vem com Node.js) ou yarn/pnpm se preferir — os comandos abaixo usam `npm`.
-- (Opcional) Docker Desktop, se quiser rodar o Postgres localmente com Docker.
+* **Frontend:** Uma Single-Page Application (SPA) em React que consome as APIs do backend.
+* **Backend Principal:** Uma API RESTful em Node.js, responsável pela lógica de negócio (usuários, NFTs, transações).
+* **Banco de Dados:** PostgreSQL rodando em Docker, para persistência de dados.
+* **Serviços Externos:** Integrações com APIs de IA para geração de arte e com a Blockchain para minting.
 
-## Configuração rápida (desenvolvimento)
+## 5. Pré-requisitos (Requisitos Técnicos)
 
-1. Instale dependências do frontend:
+Para configurar e executar este projeto, você precisará ter as seguintes ferramentas instaladas:
 
-```powershell
-cd c:/project/atrivium-teste/FrontEnd
-npm install
+* **Node.js (LTS)** e **npm**
+* **Docker e Docker Compose**
+* **Git** para controle de versão
+* Uma IDE (recomendado: Visual Studio Code).
+* Um cliente de banco de dados (recomendado: DBeaver, DataGrip).
+
+## 6. Como Executar (Ambiente de Dev)
+
+Siga os passos para iniciar o ambiente de desenvolvimento local.
+
+### 1. Clonar o Repositório
+
+No local que ficará os arquivos, clica com o botão direito do mouse e abre o terminar e cola o comando a baixo.
+
+```bash
+git clone [https://github.com/duarteHiago/atrivium-teste.git](https://github.com/duarteHiago/atrivium-teste.git)
+cd atrivium-teste
 ```
 
-2. Inicie o servidor de desenvolvimento:
+### 2. Iniciar o Banco de Dados (PostgreSQL)
 
-```powershell
-npm run dev
-```
+O container Docker do banco é gerenciado pela pasta Docker.
 
-3. Abra o endereço exibido pelo Vite (por padrão: http://localhost:5173).
-
-Observações:
-- Se o PowerShell bloquear a execução de scripts do `npm` (erro sobre `ExecutionPolicy`), você pode:
-	- Reabrir o terminal como administrador e executar `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` para permitir scripts assinados/localmente.
-	- Ou executar os comandos via CMD: `cmd /c "npm run dev"`.
-
-## Scripts úteis (`package.json`)
-
-- `npm run dev` — inicia o servidor de desenvolvimento (HMR)
-- `npm run build` — gera a build de produção em `dist/`
-- `npm run preview` — roda uma versão de preview da build
-- `npm run lint` — executa linter (ESLint)
-
-## Banco de dados com Docker (Postgres)
-
-O repositório inclui um `docker-compose.yaml` que configura um container Postgres para desenvolvimento.
-
-1. Verifique a configuração atual no arquivo `docker-compose.yaml` — por padrão neste projeto:
-
-```yaml
-services:
-	postgres:
-		image: 'postgres:16'
-		environment:
-			- 'POSTGRES_DB=atrivium'
-			- 'POSTGRES_PASSWORD=devpassword'
-			- 'POSTGRES_USER=admin'
-		ports:
-			- '5433:5432'
-		restart: unless-stopped
-		volumes:
-			- './postgres-data:/var/lib/postgresql/data'
-```
-
-2. Subir o Postgres (com Docker Desktop em execução):
-
-```powershell
-cd c:/project/atrivium-teste
+```bash
+cd Docker
 docker-compose up -d
 ```
 
-3. Conectar-se ao banco: `localhost:5433`, usuário `admin`, senha `devpassword`, database `atrivium`.
+* Conexão: Seu banco estará disponível em:
+	* Host: localhost
+	* Porta: 5433
+	* Usuário: admin
+	* Senha: devpassword
+	* Database: atrivium (ou o nome que definiu no seu .yaml)
 
-Obs: o mapeamento `5433:5432` significa que o Postgres dentro do container escuta na porta 5432, e no seu host ele fica disponível na porta 5433.
+### 3. Iniciar o Frontend (React)
 
-## Variáveis e arquivos de configuração
+Em um novo terminal, navegue até a pasta FrontEnd.
 
-- `docker-compose.yaml` — configura o Postgres para desenvolvimento local.
-- `FrontEnd/.env` — (se existir) conterá variáveis de ambiente usadas pelo front-end. No estado atual do projeto, não há `.env` obrigatório; adicione se necessário.
-
-## Debugging e troubleshooting
-
-- Erro `React is not defined` ao abrir a aplicação no navegador:
-	- Causa comum: remover `import React from 'react'` sem importar hooks usados via `React.useState`. A correção é usar `import { useState } from 'react'` ou manter o import default.
-	- No projeto atual eu já corrigi esses casos.
-
-- Problemas com `npm` no PowerShell (ExecutionPolicy):
-	- Execute `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` no PowerShell (administrador) ou rode scripts via `cmd`.
-
-- Docker:
-	- Se o container não subir: verifique `docker-compose logs postgres` e se a pasta `postgres-data` tem permissões corretas.
-
-## Build e deploy
-
-- Para gerar a build de produção localmente:
-
-```powershell
-cd c:/project/atrivium-teste/FrontEnd
-npm run build
+```bash
+cd FrontEnd
+npm install
+npm run dev
 ```
 
-- A saída ficará em `FrontEnd/dist/`. Você pode servir com um servidor estático ou usar `npm run preview` para testar localmente.
+* Abra o endereço exibido (padrão: http://localhost:5173).
 
-## Contribuindo
+### 4. Iniciar o Backend (Node.js)
 
-- Abra issues para problemas e PRs para mudanças. Siga estes passos:
-	1. Fork do repositório
-	2. Crie uma branch com uma descrição curta (`feature/ajuste-logo`, `fix/bug-navbar`)
-	3. Faça commits pequenos e descritivos
-	4. Abra PR com descrição e passos para reproduzir/testar
+Em um novo terminal, navegue até a pasta FrontEnd.
 
-## Contatos e notas finais
+```bash
+cd BackEnd
+npm install
+npm run dev
+```
 
-Se preferir, posso:
-- Gerar um `setup.ps1` para automatizar a instalação e startup do ambiente no Windows;
-- Extrair a cor exata do logo e aplicar ao botão de menu (para combinar tonalidade);
-- Adicionar instruções de integração backend (endpoints esperados) se me fornecer o backend ou contratos API.
+## 7. Estrutura de Pastas (Monorepo)
 
----
+O projeto está organizado em uma estrutura de monorepo para separar as responsabilidades:
 
-README atualizado em pt-BR com instruções completas.
+* `/BackEnd/`: Conterá toda a lógica da API (Node.js).
+* `/DataBase/`: Pode conter scripts `.sql` de migração, diagramas ER, etc.
+* `/Docker/`: Contém os arquivos `docker-compose.yaml` para serviços de infraestrutura (ex: Postgres).
+* `/FrontEnd/`: Contém o projeto React (Vite).
+    * `src/`: Código-fonte do React.
+    * `public/`: Assets públicos.
+    * `package.json`: Scripts e dependências do front-end.
+
+## 8. Troubleshooting (Solução de Problemas)
+
+* **Problemas com `npm` no PowerShell (ExecutionPolicy):**
+    * Se o PowerShell bloquear scripts `npm`, reabra o terminal como **Administrador** e execute:
+    * `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
+    * Ou use o `cmd` (Prompt de Comando).
+
+* **Docker:**
+    * Se o container do Postgres não subir, verifique os logs: `docker-compose logs postgres` (execute de dentro da pasta `Docker`).
+
+## 9. Contribuindo
+
+Para contribuir com o projeto, siga estes passos:
+
+1.  Faça um Fork do repositório.
+2.  Crie uma branch para sua feature (`feature/nova-feature`, `fix/bug-layout`).
+3.  Faça commits pequenos e descritivos.
+4.  Abra um Pull Request (PR) com a descrição das mudanças.
+
+## 10. Conclusão
+
+O Artrivium representa um passo ambicioso na intersecção entre arte, tecnologia e finanças descentralizadas. Com uma base técnica sólida e uma visão clara, o projeto está bem posicionado para se tornar uma plataforma de referência para a criação e negociação de arte gerada por IA.
