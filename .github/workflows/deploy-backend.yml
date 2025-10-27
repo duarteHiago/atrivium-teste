@@ -11,24 +11,36 @@ on:
 jobs:
   create-env:
     runs-on: ubuntu-latest
+    environment: DataBase
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Criar .env com secrets
+      - name: Criar .env com secrets do environment DataBase
+        env:
+          PORT: ${{ secrets.PORT }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_DATABASE: ${{ secrets.DB_DATABASE }}
+          HUGGINGFACE_API_KEY: ${{ secrets.HUGGINGFACE_API_KEY }}
         run: |
           mkdir -p BackEnd
           cat > BackEnd/.env <<EOF
-          PORT=${{ secrets.PORT }}
-          DB_HOST=${{ secrets.DB_HOST }}
-          DB_PORT=${{ secrets.DB_PORT }}
-          DB_USER=${{ secrets.DB_USER }}
-          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-          DB_DATABASE=${{ secrets.DB_DATABASE }}
+          PORT=${PORT}
+          DB_HOST=${DB_HOST}
+          DB_PORT=${DB_PORT}
+          DB_USER=${DB_USER}
+          DB_PASSWORD=${DB_PASSWORD}
+          DB_DATABASE=${DB_DATABASE}
+          HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
           EOF
 
-      - name: Confirmar criação (sem mostrar valores)
+      - name: Confirmar criação
         run: |
-          echo "Arquivo .env criado com sucesso!"
+          echo "✅ Arquivo .env criado com sucesso!"
+          echo "📦 Environment: DataBase (6 secrets)"
+          echo ""
           echo "Variáveis configuradas:"
           grep -o '^[^=]*' BackEnd/.env

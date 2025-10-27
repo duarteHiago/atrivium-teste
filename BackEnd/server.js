@@ -9,9 +9,16 @@ const bcrypt = require('bcrypt'); // Para hash de senha
 const app = express();
 const port = process.env.PORT || 3001;
 
+// Importar rotas
+const nftRoutes = require('./src/routes/nft.routes');
+
 // Middlewares
 app.use(cors()); // Permite requisições do frontend
-app.use(express.json()); // Habilita o parsing de JSON no corpo das requisições
+app.use(express.json({ limit: '10mb' })); // Habilita o parsing de JSON (aumenta limite para imagens)
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Servir arquivos estáticos (imagens dos NFTs)
+app.use('/uploads', express.static('uploads'));
 
 // Configuração da Conexão com o Banco de Dados (lê do .env)
 const pool = new Pool({
@@ -30,6 +37,15 @@ pool.query('SELECT NOW()', (err, res) => {
     console.log('Conectado ao banco de dados:', res.rows[0].now);
   }
 });
+
+
+// Armazena o pool no app para acesso nos controllers
+app.locals.pool = pool;
+
+// --- ROTAS ---
+
+// Rotas de NFT
+app.use('/api/nft', nftRoutes);
 
 
 // --- LÓGICA DE VALIDAÇÃO ---
