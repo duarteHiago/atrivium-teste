@@ -11,6 +11,7 @@ import Modal from './Components/Modal/Modal';
 import AuthModal from './Components/AuthModal/AuthModal';
 import WalletModal from './Components/WalletModal/WalletModal';
 import ProfileDropdown from './Components/ProfileDropdown/ProfileDropdown';
+import CreateNFT from './Components/CreateNFT/CreateNFT';
 
 // 2. ATUALIZE OS ESTILOS PARA O EFEITO DE BLUR
 // Adiciona 'filter' e 'transition' quando um modal está aberto
@@ -229,6 +230,7 @@ function App() {
         <MainContent $isSidebarOpen={isSidebarOpen}>
           <Routes>
             <Route path="/admin" element={<Cms onClose={closeCms} />} />
+            <Route path="/create-nft" element={<CreateNFT />} />
             <Route path="/" element={(
               <>
                 {/* ... (Todo o seu conteúdo da página Discover) ... */}

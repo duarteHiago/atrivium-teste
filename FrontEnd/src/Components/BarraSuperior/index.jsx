@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import styled from 'styled-components'
+import { useNavigate } from 'react-router-dom'
 import Logo from './Logo'
 import BarraDePesquisa from './BarraDePesquisa'
 
@@ -78,6 +79,21 @@ const WalletButton = styled.button`
   }
 `;
 
+const CreateNFTButton = styled.button`
+  background-color: #27ae60;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  
+  &:hover {
+    background-color: #2ecc71;
+  }
+`;
+
 const ProfileButton = styled.button`
   background-color: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -119,6 +135,7 @@ const BarraSuperior = ({
 }) => {
   
   const [hovered, setHovered] = useState(false);
+  const navigate = useNavigate();
   
   useEffect(() => {
     if (!$isOpen) setHovered(false); // Usa com $
@@ -158,6 +175,9 @@ const BarraSuperior = ({
         >
           {isAdmin ? 'ADMIN' : 'dev'}
         </AdminToggle>
+        <CreateNFTButton onClick={() => navigate('/create-nft')}>
+          + Your NFT
+        </CreateNFTButton>
         <WalletButton onClick={onWalletClick}>
           Connect Wallet
         </WalletButton>
