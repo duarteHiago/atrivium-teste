@@ -1,5 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
+import UserManagement from './UserManagement';
 
 const CmsContainer = styled.div`
   padding: 24px;
@@ -61,6 +62,13 @@ const Cms = ({ onClose }) => {
           disponível/funcional dependendo do estado `isAdmin` passado pela aplicação.
         </p>
       </Placeholder>
+
+      {/* Gestão de Usuários (roles) */}
+      <div style={{ marginTop: 20 }}>
+        <h2 style={{ margin: '10px 0' }}>Usuários e Permissões</h2>
+        <p style={{ marginTop: 0, opacity: 0.8 }}>Liste e altere a role de cada usuário (user/admin).</p>
+        <UserManagement />
+      </div>
     </CmsContainer>
   );
 };

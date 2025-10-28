@@ -13,6 +13,8 @@ import WalletModal from './Components/WalletModal/WalletModal';
 import ProfileDropdown from './Components/ProfileDropdown/ProfileDropdown';
 import CreateNFT from './Components/CreateNFT/CreateNFT';
 import NftGallery from './Components/NftGallery/NftGallery';
+import Profile from './Components/User/Profile';
+import Gallery from './Components/Gallery/Gallery';
 
 // 2. ATUALIZE OS ESTILOS PARA O EFEITO DE BLUR
 // Adiciona 'filter' e 'transition' quando um modal está aberto
@@ -162,9 +164,9 @@ function App() {
   
   // Lógica do botão de Perfil
   const handleProfileClick = () => {
-    closeAllModals()
+    closeAllModals();
     if (isLoggedIn) {
-      setIsProfileDropdownOpen(!isProfileDropdownOpen); // Abre o dropdown
+      setIsProfileDropdownOpen(v => !v); // volta a exibir menu suspenso
     } else {
       setIsLoginModalOpen(true); // Abre o modal de login
     }
@@ -179,6 +181,13 @@ function App() {
   // Lógica de Login (simulada)
   const handleLoginSuccess = () => {
     setIsLoggedIn(true);
+    // Ajusta isAdmin com base na role do usuário salva no localStorage
+    try {
+      const role = localStorage.getItem('role');
+      setIsAdmin(role === 'admin');
+    } catch {
+      /* ignore */
+    }
     setIsLoginModalOpen(false)
   };
   
@@ -223,6 +232,20 @@ function App() {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [isSidebarOpen]);
 
+  // Inicializa estado de login/admin baseado no localStorage (melhor UX)
+  useEffect(() => {
+    try {
+      const token = localStorage.getItem('token');
+      const role = localStorage.getItem('role');
+      if (token) {
+        setIsLoggedIn(true);
+        setIsAdmin(role === 'admin');
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   // Buscar NFTs recentes do backend
   useEffect(() => {
     const fetchRecentNfts = async () => {
@@ -258,7 +281,11 @@ function App() {
       
       {/* O Dropdown do Perfil (não usa o Modal, é um menu simples) */}
       {isLoggedIn && isProfileDropdownOpen && (
-        <ProfileDropdown onLogout={handleLogout} />
+        <ProfileDropdown 
+          onLogout={handleLogout}
+          onGoProfile={() => { setIsProfileDropdownOpen(false); navigate('/profile'); }}
+          onClose={() => setIsProfileDropdownOpen(false)}
+        />
       )}
       
       {/* 4. Aplica o blur no container da página */}
@@ -273,11 +300,13 @@ function App() {
           isAdmin={isAdmin}
           setIsAdmin={setIsAdmin}
         />
-        <BarraLateral $isOpen={isSidebarOpen} sidebarRef={sidebarRef} onOpenCms={openCms} isAdmin={isAdmin} onGoHome={goHome} />
+  <BarraLateral $isOpen={isSidebarOpen} sidebarRef={sidebarRef} onOpenCms={openCms} isAdmin={isAdmin} onGoHome={goHome} />
 
         <MainContent $isSidebarOpen={isSidebarOpen}>
           <Routes>
             <Route path="/admin" element={<Cms onClose={closeCms} />} />
+            <Route path="/profile" element={<Profile onRequireLogin={() => setIsLoginModalOpen(true)} />} />
+            <Route path="/gallery" element={<Gallery />} />
             <Route path="/create-nft" element={<CreateNFT />} />
             <Route path="/gallery" element={<NftGallery />} />
             <Route path="/" element={(

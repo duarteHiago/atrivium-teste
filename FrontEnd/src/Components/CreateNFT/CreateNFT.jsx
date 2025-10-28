@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import styled from 'styled-components';
+import { API_BASE } from '../../config/api';
 
 const Container = styled.div`
   max-width: 800px;
@@ -193,10 +194,12 @@ function CreateNFT() {
     setResult(null);
 
     try {
-      const response = await fetch('http://localhost:3001/api/leonardo/generate-and-save', {
+  const token = localStorage.getItem('token');
+  const response = await fetch(`${API_BASE}/api/leonardo/generate-and-save`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify(formData)
       });

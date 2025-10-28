@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const { Pool } = require('pg');
+const jwt = require('jsonwebtoken');
 
 // Configuração do banco de dados
 const pool = new Pool({
@@ -43,6 +44,19 @@ async function callLeonardoAPI(endpoint, method = 'GET', body = null) {
   }
 
   return await response.json();
+}
+
+// Helper: extrai userId (UUID) do JWT Bearer (se presente)
+function getUserIdFromAuthHeader(req) {
+  try {
+    const auth = req.headers['authorization'] || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    if (!token) return null;
+    const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret-change-me');
+    return payload?.sub || null;
+  } catch (e) {
+    return null;
+  }
 }
 
 // --- ENDPOINT 1: Testar conexão com a API ---
@@ -166,6 +180,7 @@ router.get('/models', async (req, res) => {
 router.post('/generate-and-save', async (req, res) => {
   try {
     const { prompt, name, description, style } = req.body;
+    const userId = getUserIdFromAuthHeader(req); // opcional
 
     if (!prompt) {
       return res.status(400).json({
@@ -241,8 +256,9 @@ router.post('/generate-and-save', async (req, res) => {
       INSERT INTO nfts (
         token_id, name, description, prompt, style,
         image_hash, certificate_hash, image_url,
-        status, network
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        status, network,
+        creator_id, current_owner_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *
     `;
 
@@ -256,7 +272,9 @@ router.post('/generate-and-save', async (req, res) => {
       certificateHash,
       imageData.url,
       'created',
-      'off-chain'
+      'off-chain',
+      userId,
+      userId
     ];
 
     const dbResult = await pool.query(insertQuery, values);

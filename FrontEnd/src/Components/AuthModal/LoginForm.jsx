@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
+import { API_BASE } from '../../config/api';
 
 // Reutilizando alguns estilos do formulário de cadastro
 const Form = styled.form`
@@ -55,25 +56,47 @@ const LinkStyled = styled.a`
 `;
 
 const LoginForm = ({ onAuthSuccess }) => {
-  
-  const handleSubmit = (e) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Lógica de login (simulada)
-    // ... (chamada para API do backend) ...
-    onAuthSuccess(); // Simula sucesso
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Falha no login');
+  // Salva token e user localmente
+      localStorage.setItem('token', data.token);
+      if (data.user?.user_id) localStorage.setItem('creatorId', data.user.user_id);
+  if (data.user?.role) localStorage.setItem('role', data.user.role);
+      onAuthSuccess?.(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <Form onSubmit={handleSubmit}>
-      <Input type="email" placeholder="Email" required />
-      <Input type="password" placeholder="Password" required />
+  <Input type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required />
+  <Input type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} required />
       <OptionsRow>
         <label>
           <input type="checkbox" /> Remember me
         </label>
         <LinkStyled href="#">Forgot Password?</LinkStyled>
       </OptionsRow>
-      <SubmitButton type="submit">Login</SubmitButton>
+      {error && <p style={{color:'#ff6b6b',margin:0}}>{error}</p>}
+  <SubmitButton type="submit" disabled={loading}>{loading ? 'Entrando...' : 'Login'}</SubmitButton>
     </Form>
   );
 };
