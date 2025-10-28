@@ -11,6 +11,7 @@ const port = process.env.PORT || 3001;
 
 // Importar rotas
 const nftRoutes = require('./src/routes/nft.routes');
+const leonardoRoutes = require('./src/routes/leonardo.routes'); // Rotas da API Leonardo
 
 // Middlewares
 app.use(cors()); // Permite requisições do frontend
@@ -19,6 +20,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Servir arquivos estáticos (imagens dos NFTs)
 app.use('/uploads', express.static('uploads'));
+
+// Usar rotas
+app.use('/api/leonardo', leonardoRoutes); // Rotas da API Leonardo
 
 // Configuração da Conexão com o Banco de Dados (lê do .env)
 const pool = new Pool({

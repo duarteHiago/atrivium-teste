@@ -48,6 +48,24 @@ services:
       - '/app/node_modules'         # Evita conflito com node_modules local
     command: npm run dev            # Usa nodemon para hot-reload
 
+  # Serviço do Frontend (React + Vite)
+  frontend:
+    build:
+      context: ../FrontEnd
+      dockerfile: Dockerfile
+    container_name: atrivium-frontend
+    environment:
+      - NODE_ENV=development
+    ports:
+      - '5173:5173'
+    restart: unless-stopped
+    networks:
+      - atrivium-network
+    volumes:
+      - '../FrontEnd:/app'           # Hot-reload: mapeia código local
+      - '/app/node_modules'          # Evita conflito com node_modules local
+    command: npm run dev -- --host 0.0.0.0  # Vite com hot-reload
+
 networks:
   atrivium-network:
     driver: bridge

@@ -12,11 +12,12 @@ import AuthModal from './Components/AuthModal/AuthModal';
 import WalletModal from './Components/WalletModal/WalletModal';
 import ProfileDropdown from './Components/ProfileDropdown/ProfileDropdown';
 import CreateNFT from './Components/CreateNFT/CreateNFT';
+import NftGallery from './Components/NftGallery/NftGallery';
 
 // 2. ATUALIZE OS ESTILOS PARA O EFEITO DE BLUR
 // Adiciona 'filter' e 'transition' quando um modal está aberto
 const PageContainer = styled.div`
-  filter: ${props => props.$isModalOpen ? 'blur(4px)' : 'none'}; 
+  filter: ${props => props.$isModalOpen ? 'blur(4px)' : 'none'};
   transition: filter 0.2s ease-out;
 `;
 
@@ -90,17 +91,42 @@ const CardImagePlaceholder = styled.div`
   height: 250px;
   background-color: rgba(255, 255, 255, 0.05);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-`
+`;
+
+const CardImage = styled.img`
+  width: 100%;
+  height: 250px;
+  object-fit: cover;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+`;
+
 const CardInfo = styled.div`
   padding: 16px;
-`
+`;
+
+const CardTitle = styled.h3`
+  margin: 0 0 8px 0;
+  font-size: 1.1em;
+  font-weight: 600;
+  color: white;
+`;
+
+const CardDescription = styled.p`
+  margin: 0;
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.6);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
 const PlaceholderText = styled.div`
   background-color: rgba(255, 255, 255, 0.2);
   height: ${props => props.height || '20px'};
   border-radius: 4px;
   margin-bottom: 10px;
   width: ${props => props.width || '80%'};
-`
+`;
 
 
 function App() {
@@ -112,6 +138,8 @@ function App() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false); // Modal de autenticação
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false); // Modal de carteira
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false); // Menu do perfil
+  const [recentNfts, setRecentNfts] = useState([]);
+  const [loadingNfts, setLoadingNfts] = useState(true);
   
   const menuRef = useRef(null);
   const sidebarRef = useRef(null);
@@ -195,6 +223,26 @@ function App() {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [isSidebarOpen]);
 
+  // Buscar NFTs recentes do backend
+  useEffect(() => {
+    const fetchRecentNfts = async () => {
+      try {
+        const response = await fetch('http://localhost:3001/api/leonardo/list');
+        const data = await response.json();
+        if (data.success) {
+          // Pegar apenas os 5 mais recentes
+          setRecentNfts(data.nfts.slice(0, 5));
+        }
+      } catch (error) {
+        console.error('Erro ao buscar NFTs recentes:', error);
+      } finally {
+        setLoadingNfts(false);
+      }
+    };
+    
+    fetchRecentNfts();
+  }, []);
+
   const placeholderItems = [1, 2, 3, 4, 5];
 
   return (
@@ -231,6 +279,7 @@ function App() {
           <Routes>
             <Route path="/admin" element={<Cms onClose={closeCms} />} />
             <Route path="/create-nft" element={<CreateNFT />} />
+            <Route path="/gallery" element={<NftGallery />} />
             <Route path="/" element={(
               <>
                 {/* ... (Todo o seu conteúdo da página Discover) ... */}
@@ -249,6 +298,47 @@ function App() {
                         </CardInfo>
                       </NftCard>
                     ))}
+                  </CardRow>
+                </Section>
+                <Section>
+                  <SectionTitle>🎨 NFTs Gerados Recentemente</SectionTitle>
+                  <CardRow>
+                    {loadingNfts ? (
+                      // Mostra placeholders enquanto carrega
+                      placeholderItems.map((item) => (
+                        <NftCard key={item}>
+                          <CardImagePlaceholder />
+                          <CardInfo>
+                            <PlaceholderText width="60%" />
+                            <PlaceholderText width="40%" height="16px" />
+                          </CardInfo>
+                        </NftCard>
+                      ))
+                    ) : recentNfts.length > 0 ? (
+                      // Mostra os NFTs reais
+                      recentNfts.map((nft) => (
+                        <NftCard key={nft.nft_id}>
+                          <CardImage src={nft.image_url} alt={nft.name || 'NFT'} />
+                          <CardInfo>
+                            <CardTitle>{nft.name || 'NFT sem nome'}</CardTitle>
+                            <CardDescription>
+                              {nft.description || nft.prompt || 'Gerado com IA'}
+                            </CardDescription>
+                          </CardInfo>
+                        </NftCard>
+                      ))
+                    ) : (
+                      // Mostra cards vazios quando não tem NFTs
+                      placeholderItems.map((item) => (
+                        <NftCard key={item}>
+                          <CardImagePlaceholder />
+                          <CardInfo>
+                            <PlaceholderText width="60%" />
+                            <PlaceholderText width="40%" height="16px" />
+                          </CardInfo>
+                        </NftCard>
+                      ))
+                    )}
                   </CardRow>
                 </Section>
                 <Section>

@@ -1,482 +1,301 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
 
 const Container = styled.div`
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100vh - 80px);
-  padding: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
+  max-width: 800px;
+  margin: 40px auto;
+  padding: 30px;
+  background: rgba(30, 30, 31, 0.8);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 `;
 
-const Title = styled.h1`
-  font-size: 2.5rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-  color: white;
+const Title = styled.h2`
+  font-size: 2em;
+  margin-bottom: 10px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 `;
 
 const Subtitle = styled.p`
-  font-size: 1.1rem;
-  color: rgba(255, 255, 255, 0.7);
-  margin-bottom: 2rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 30px;
 `;
 
-const ContentGrid = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2rem;
-  
-  @media (max-width: 968px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const FormSection = styled.div`
-  background-color: rgba(30, 30, 31, 1);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 2rem;
-`;
-
-const PreviewSection = styled.div`
-  background-color: rgba(30, 30, 31, 1);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 2rem;
+const Form = styled.form`
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 500px;
+  gap: 20px;
 `;
 
-const FormGroup = styled.div`
-  margin-bottom: 1.5rem;
+const InputGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 `;
 
 const Label = styled.label`
-  display: block;
-  color: white;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-  font-size: 0.95rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
 `;
 
 const Input = styled.input`
-  width: 100%;
-  padding: 0.75rem;
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   color: white;
-  font-size: 1rem;
-  
+  font-size: 1em;
+  transition: all 0.3s;
+
   &:focus {
     outline: none;
-    border-color: #27ae60;
+    border-color: #667eea;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  &::placeholder {
+    color: rgba(255, 255, 255, 0.4);
   }
 `;
 
 const TextArea = styled.textarea`
-  width: 100%;
-  padding: 0.75rem;
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   color: white;
-  font-size: 1rem;
-  min-height: 100px;
+  font-size: 1em;
+  min-height: 120px;
   resize: vertical;
   font-family: inherit;
-  
-  &:focus {
-    outline: none;
-    border-color: #27ae60;
-  }
-`;
+  transition: all 0.3s;
 
-const Select = styled.select`
-  width: 100%;
-  padding: 0.75rem;
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  color: white;
-  font-size: 1rem;
-  cursor: pointer;
-  
   &:focus {
     outline: none;
-    border-color: #27ae60;
+    border-color: #667eea;
+    background: rgba(255, 255, 255, 0.08);
   }
-  
-  option {
-    background-color: rgba(20, 20, 21, 1);
+
+  &::placeholder {
+    color: rgba(255, 255, 255, 0.4);
   }
 `;
 
 const Button = styled.button`
-  width: 100%;
-  padding: 1rem;
-  background-color: ${props => props.variant === 'primary' ? '#27ae60' : 'rgba(255, 255, 255, 0.1)'};
+  padding: 14px 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  border: 1px solid ${props => props.variant === 'primary' ? '#27ae60' : 'rgba(255, 255, 255, 0.2)'};
+  border: none;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 1.1em;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
-  margin-top: ${props => props.marginTop || '0'};
-  
-  &:hover {
-    background-color: ${props => props.variant === 'primary' ? '#2ecc71' : 'rgba(255, 255, 255, 0.2)'};
+  transition: transform 0.2s, box-shadow 0.2s;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
   }
-  
+
   &:disabled {
-    opacity: 0.5;
+    opacity: 0.6;
     cursor: not-allowed;
   }
 `;
 
-const PreviewImage = styled.img`
-  max-width: 100%;
-  max-height: 500px;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-`;
-
-const PlaceholderBox = styled.div`
-  width: 100%;
-  height: 400px;
-  border: 2px dashed rgba(255, 255, 255, 0.3);
-  border-radius: 12px;
-  background-color: rgba(255, 255, 255, 0.05);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 1.1rem;
+const LoadingContainer = styled.div`
   text-align: center;
-  padding: 2rem;
+  padding: 40px;
 `;
 
-const LoadingSpinner = styled.div`
-  border: 3px solid rgba(255, 255, 255, 0.1);
-  border-top: 3px solid #27ae60;
+const LoadingText = styled.p`
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 1.1em;
+  margin-top: 16px;
+`;
+
+const Spinner = styled.div`
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-top: 4px solid #667eea;
   border-radius: 50%;
   width: 50px;
   height: 50px;
   animation: spin 1s linear infinite;
-  margin-bottom: 1rem;
-  
+  margin: 0 auto;
+
   @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
   }
 `;
 
-const SuccessMessage = styled.div`
-  background-color: rgba(39, 174, 96, 0.2);
-  border: 1px solid #27ae60;
+const ResultContainer = styled.div`
+  margin-top: 30px;
+  padding: 20px;
+  background: rgba(102, 126, 234, 0.1);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  border-radius: 12px;
+`;
+
+const ResultImage = styled.img`
+  width: 100%;
   border-radius: 8px;
-  padding: 1rem;
-  color: #27ae60;
-  margin-top: 1rem;
-  text-align: center;
+  margin-top: 16px;
+`;
+
+const ResultInfo = styled.div`
+  margin-top: 16px;
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.7);
+
+  p {
+    margin: 8px 0;
+  }
+
+  strong {
+    color: rgba(255, 255, 255, 0.9);
+  }
 `;
 
 const ErrorMessage = styled.div`
-  background-color: rgba(231, 76, 60, 0.2);
-  border: 1px solid #e74c3c;
+  padding: 16px;
+  background: rgba(255, 0, 0, 0.1);
+  border: 1px solid rgba(255, 0, 0, 0.3);
   border-radius: 8px;
-  padding: 1rem;
-  color: #e74c3c;
-  margin-top: 1rem;
+  color: #ff6b6b;
+  margin-top: 20px;
 `;
 
-const TokenInfo = styled.div`
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  padding: 1rem;
-  margin-top: 1rem;
-  font-size: 0.9rem;
-  
-  strong {
-    color: #27ae60;
-  }
-  
-  code {
-    background-color: rgba(0, 0, 0, 0.3);
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    font-family: monospace;
-    display: block;
-    margin-top: 0.5rem;
-    word-break: break-all;
-  }
-`;
-
-const CreateNFT = () => {
+function CreateNFT() {
   const [formData, setFormData] = useState({
-    name: '',
-    description: '',
     prompt: '',
-    style: 'stable-diffusion'
+    name: '',
+    description: ''
   });
-  const [creatorId, setCreatorId] = useState(() => {
-    try {
-      return localStorage.getItem('creatorId') || '';
-    } catch {
-      return '';
-    }
-  });
-  
-  const [previewImage, setPreviewImage] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const [nftData, setNftData] = useState(null);
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    setError(null);
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
   };
 
-  const handleGeneratePreview = async () => {
-    if (!formData.prompt) {
-      setError('Por favor, insira uma descrição para gerar a imagem');
-      return;
-    }
-
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     setLoading(true);
     setError(null);
+    setResult(null);
 
     try {
-      const response = await fetch('http://localhost:3001/api/nft/generate-preview', {
+      const response = await fetch('http://localhost:3001/api/leonardo/generate-and-save', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          prompt: formData.prompt,
-          style: formData.style
-        })
+        body: JSON.stringify(formData)
       });
 
       const data = await response.json();
 
-      if (data.success) {
-        setPreviewImage(data.data.image);
-      } else {
-        setError(data.message || 'Erro ao gerar imagem');
+      if (!response.ok) {
+        throw new Error(data.message || 'Erro ao gerar NFT');
       }
+
+      setResult(data.nft);
+      setFormData({ prompt: '', name: '', description: '' });
+
     } catch (err) {
-      setError('Erro ao conectar com o servidor. Verifique se o backend está rodando.');
-      console.error(err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateNFT = async () => {
-    if (!formData.name || !formData.description || !previewImage) {
-      setError('Por favor, preencha todos os campos e gere uma imagem');
-      return;
-    }
-
-    // creatorId é opcional; se vazio, o backend criará sem associação de usuário
-
-    setCreating(true);
-    setError(null);
-
-    try {
-      const response = await fetch('http://localhost:3001/api/nft/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: formData.name,
-          description: formData.description,
-          prompt: formData.prompt,
-          style: formData.style,
-          imageBase64: previewImage,
-          creatorId: creatorId, // opcional; backend trata vazio como null
-          attributes: []
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setSuccess(true);
-        setNftData(data.data);
-        
-        // Limpa o formulário após 3 segundos
-        setTimeout(() => {
-          setFormData({ name: '', description: '', prompt: '', style: 'stable-diffusion' });
-          setPreviewImage(null);
-          setSuccess(false);
-          setNftData(null);
-        }, 10000);
-      } else {
-        setError(data.message || 'Erro ao criar NFT');
-      }
-    } catch (err) {
-      setError('Erro ao conectar com o servidor');
-      console.error(err);
-    } finally {
-      setCreating(false);
-    }
-  };
-
   return (
     <Container>
-      <Title>Criar seu NFT</Title>
-      <Subtitle>
-        Crie NFTs únicos usando IA generativa. Cada imagem é tokenizada de forma única e verificável.
-      </Subtitle>
+      <Title>🎨 Gerar NFT com IA</Title>
+      <Subtitle>Crie arte única usando inteligência artificial</Subtitle>
 
-      <ContentGrid>
-        <FormSection>
-          <FormGroup>
-            <Label>Nome do NFT *</Label>
-            <Input
-              type="text"
-              name="name"
-              value={formData.name}
-              onChange={handleInputChange}
-              placeholder="Ex: Cyberpunk Cat"
-              disabled={loading || creating}
-            />
-          </FormGroup>
+      <Form onSubmit={handleSubmit}>
+        <InputGroup>
+          <Label htmlFor="prompt">Prompt (Descrição da imagem) *</Label>
+          <TextArea
+            id="prompt"
+            name="prompt"
+            value={formData.prompt}
+            onChange={handleChange}
+            placeholder="Ex: A majestic dragon flying over mountains at sunset, digital art, detailed, vibrant colors"
+            required
+            disabled={loading}
+          />
+        </InputGroup>
 
-          <FormGroup>
-            <Label>Descrição *</Label>
-            <TextArea
-              name="description"
-              value={formData.description}
-              onChange={handleInputChange}
-              placeholder="Descreva seu NFT..."
-              disabled={loading || creating}
-            />
-          </FormGroup>
+        <InputGroup>
+          <Label htmlFor="name">Nome do NFT</Label>
+          <Input
+            type="text"
+            id="name"
+            name="name"
+            value={formData.name}
+            onChange={handleChange}
+            placeholder="Ex: Dragon Sunset #1"
+            disabled={loading}
+          />
+        </InputGroup>
 
-          <FormGroup>
-            <Label>Prompt para IA *</Label>
-            <TextArea
-              name="prompt"
-              value={formData.prompt}
-              onChange={handleInputChange}
-              placeholder="Ex: A futuristic cat with neon lights, cyberpunk style, detailed"
-              disabled={loading || creating}
-            />
-          </FormGroup>
+        <InputGroup>
+          <Label htmlFor="description">Descrição</Label>
+          <TextArea
+            id="description"
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            placeholder="Descrição opcional do seu NFT"
+            disabled={loading}
+            style={{ minHeight: '80px' }}
+          />
+        </InputGroup>
 
-          <FormGroup>
-            <Label>Creator ID (UUID do usuário)</Label>
-            <Input
-              type="text"
-              name="creatorId"
-              value={creatorId}
-              onChange={(e) => {
-                setCreatorId(e.target.value);
-                try { localStorage.setItem('creatorId', e.target.value); } catch { void 0; }
-              }}
-              placeholder="Cole aqui o UUID do usuário criador"
-              disabled={loading || creating}
-            />
-            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem', marginTop: '0.5rem' }}>
-              Dica: crie um usuário de teste e cole o <code>user_id</code> aqui. O valor fica salvo no navegador.
-            </p>
-          </FormGroup>
+        <Button type="submit" disabled={loading || !formData.prompt}>
+          {loading ? 'Gerando...' : 'Gerar NFT'}
+        </Button>
+      </Form>
 
-          <FormGroup>
-            <Label>Estilo de Arte</Label>
-            <Select
-              name="style"
-              value={formData.style}
-              onChange={handleInputChange}
-              disabled={loading || creating}
-            >
-              <option value="stable-diffusion">Digital Art</option>
-              <option value="anime">Anime</option>
-              <option value="realistic">Realistic</option>
-            </Select>
-          </FormGroup>
+      {loading && (
+        <LoadingContainer>
+          <Spinner />
+          <LoadingText>
+            Gerando seu NFT... Isso pode levar alguns minutos.
+          </LoadingText>
+        </LoadingContainer>
+      )}
 
-          <Button
-            variant="secondary"
-            onClick={handleGeneratePreview}
-            disabled={loading || creating || !formData.prompt}
-          >
-            {loading ? 'Gerando...' : '🎨 Gerar Preview'}
-          </Button>
+      {error && (
+        <ErrorMessage>
+          ❌ {error}
+        </ErrorMessage>
+      )}
 
-          {previewImage && (
-            <Button
-              variant="primary"
-              marginTop="1rem"
-              onClick={handleCreateNFT}
-              disabled={creating || !formData.name || !formData.description}
-            >
-              {creating ? 'Criando NFT...' : '✨ Criar NFT'}
-            </Button>
-          )}
-
-          {error && <ErrorMessage>{error}</ErrorMessage>}
-          {success && (
-            <SuccessMessage>
-              ✅ NFT criado com sucesso! Seu token foi gerado.
-            </SuccessMessage>
-          )}
-        </FormSection>
-
-        <PreviewSection>
-          {loading ? (
-            <>
-              <LoadingSpinner />
-              <p>Gerando imagem com IA...</p>
-              <p style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.5)' }}>
-                Isso pode levar alguns segundos
-              </p>
-            </>
-          ) : previewImage ? (
-            <>
-              <PreviewImage src={previewImage} alt="Preview do NFT" />
-              {nftData && (
-                <TokenInfo>
-                  <strong>Token ID:</strong>
-                  <code>{nftData.nft.tokenId}</code>
-                  <strong style={{ display: 'block', marginTop: '1rem' }}>Image Hash:</strong>
-                  <code>{nftData.nft.imageHash}</code>
-                  <strong style={{ display: 'block', marginTop: '1rem' }}>Certificado:</strong>
-                  <code>{nftData.certificate.certificateHash}</code>
-                </TokenInfo>
-              )}
-            </>
-          ) : (
-            <PlaceholderBox>
-              <span style={{ fontSize: '4rem', marginBottom: '1rem' }}>🎨</span>
-              <p>Sua imagem gerada por IA aparecerá aqui</p>
-              <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>
-                Preencha o prompt e clique em "Gerar Preview"
-              </p>
-            </PlaceholderBox>
-          )}
-        </PreviewSection>
-      </ContentGrid>
+      {result && (
+        <ResultContainer>
+          <h3>✅ NFT Gerado com Sucesso!</h3>
+          <ResultImage src={result.imageUrl} alt={result.name} />
+          <ResultInfo>
+            <p><strong>Nome:</strong> {result.name}</p>
+            <p><strong>Token ID:</strong> {result.tokenId}</p>
+            <p><strong>Prompt:</strong> {result.prompt}</p>
+            <p><strong>Criado em:</strong> {new Date(result.createdAt).toLocaleString('pt-BR')}</p>
+          </ResultInfo>
+        </ResultContainer>
+      )}
     </Container>
   );
-};
+}
 
 export default CreateNFT;

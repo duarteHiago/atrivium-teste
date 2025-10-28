@@ -11,4 +11,11 @@ export default defineConfig({
       jsxRuntime: 'automatic',
     }),
   ],
-})
+    server: {
+      host: '0.0.0.0', // Permite acesso externo (necessário para Docker)
+      port: 5173,
+      watch: {
+        usePolling: true, // Necessário para hot-reload em Docker
+      },
+    },
+  })
