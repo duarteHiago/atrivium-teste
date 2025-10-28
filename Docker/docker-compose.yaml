@@ -1,6 +1,8 @@
 services:
+  # Serviço do PostgreSQL
   postgres:
     image: 'postgres:16'
+    container_name: atrivium-postgres
     environment:
       - 'POSTGRES_DB=atrivium-database'
       - 'POSTGRES_PASSWORD=devpassword'
@@ -10,3 +12,60 @@ services:
     restart: unless-stopped
     volumes:
       - '../DataBase/postgres-data:/var/lib/postgresql/data'
+      - '../DataBase/SQL:/docker-entrypoint-initdb.d'  # Inicializa o schema automaticamente
+    networks:
+      - atrivium-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d atrivium-database"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Serviço do Backend (Node.js)
+  backend:
+    build:
+      context: ../BackEnd
+      dockerfile: Dockerfile
+    container_name: atrivium-backend
+    environment:
+      - PORT=3001
+      - DB_HOST=postgres  # Nome do serviço postgres
+      - DB_PORT=5432      # Porta interna do container
+      - DB_USER=admin
+      - DB_PASSWORD=devpassword
+      - DB_DATABASE=atrivium-database
+      - NODE_ENV=development
+    ports:
+      - '3001:3001'
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy  # Só inicia após o postgres estar pronto
+    networks:
+      - atrivium-network
+    volumes:
+      - '../BackEnd:/app'           # Hot-reload: mapeia código local
+      - '/app/node_modules'         # Evita conflito com node_modules local
+    command: npm run dev            # Usa nodemon para hot-reload
+
+  # Serviço do Frontend (React + Vite)
+  frontend:
+    build:
+      context: ../FrontEnd
+      dockerfile: Dockerfile
+    container_name: atrivium-frontend
+    environment:
+      - NODE_ENV=development
+    ports:
+      - '5173:5173'
+    restart: unless-stopped
+    networks:
+      - atrivium-network
+    volumes:
+      - '../FrontEnd:/app'           # Hot-reload: mapeia código local
+      - '/app/node_modules'          # Evita conflito com node_modules local
+    command: npm run dev -- --host 0.0.0.0  # Vite com hot-reload
+
+networks:
+  atrivium-network:
+    driver: bridge

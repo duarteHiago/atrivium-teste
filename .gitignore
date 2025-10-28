@@ -25,3 +25,4 @@ dist-ssr
 
 # Variáveis de ambiente
 **/backend/.env
+BackEnd/.env
