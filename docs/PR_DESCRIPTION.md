@@ -68,20 +68,6 @@ Principais arquivos / áreas alteradas
   - Docker/docker-compose.yaml (integração do serviço backend com postgres)
   - BackEnd/.dockerignore
 
-Atualizações de documentação (issues marcadas com Documentation)
----------------------------------------------------------------
-- Issue #50 — Documentar Endpoints CRUD de NFTs  
-  - Resumo sucinto: Documentação OpenAPI criada cobrindo todos os endpoints CRUD de NFTs (métodos, parâmetros de rota/query, requestBody para POST/PUT, schemas, segurança JWT e exemplos de respostas). Permite testar via Swagger UI.
-
-- Issue #52 — Definir Contrato da API para Geração de Imagem IA  
-  - Resumo sucinto: Contrato de API especificado (endpoints de geração e status), com esquema de request e resposta e recomendação de abordagem assíncrona por jobId. Documentado para facilitar integração frontend ↔ backend.
-
-- Issue #49 — Definir Padrões de Resposta da API  
-  - Resumo sucinto: Padrões JSON definidos e documentados; erros possuem `code` e `details` para facilitar tratamento e traduções no cliente; middleware de erro adaptado para seguir o padrão.
-
-- Issue #48 — Documentar API de Autenticação (Login/Registro)  
-  - Resumo sucinto: Endpoints `/api/auth/register` e `/api/auth/login` documentados com exemplos de payload, códigos de status e formatos de resposta (sucesso e erro); disponível em `/api-docs`.
-
 ---
 
 ## Integração com leonardo.ai (inserido nesta descrição)
@@ -228,14 +214,6 @@ Instruções de validação / QA
 - Frontend:
   - Abrir app (porta padrão do front-end) e acessar página Discover: confirmar exibição de cards de NFTs (imagem, nome, preço).
   - Abrir CMS via toggle e validar comportamento do botão Discover na barra lateral.
-
-Checklist (pré-merge)
----------------------
-- [ ] Todos os testes automáticos e CI passam.  
-- [ ] Swagger UI acessível e endpoints documentados.  
-- [ ] Dockerfile e docker-compose funcionais (construir imagem e iniciar containers).  
-- [ ] Revisão de código completa para as mudanças em routes/controllers/services.  
-- [ ] Issues listadas atualizadas com referências de PR/commit (serão fechadas automaticamente pelo merge se mencionadas).
 
 Notas finais
 -----------
