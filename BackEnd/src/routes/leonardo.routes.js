@@ -179,7 +179,7 @@ router.get('/models', async (req, res) => {
 // --- ENDPOINT 5: Gerar imagem COM POLLING e salvar no banco ---
 router.post('/generate-and-save', async (req, res) => {
   try {
-    const { prompt, name, description, style } = req.body;
+    const { prompt, name, description, style, collection_id } = req.body;
     const userId = getUserIdFromAuthHeader(req); // opcional
 
     if (!prompt) {
@@ -257,8 +257,8 @@ router.post('/generate-and-save', async (req, res) => {
         token_id, name, description, prompt, style,
         image_hash, certificate_hash, image_url,
         status, network,
-        creator_id, current_owner_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        creator_id, current_owner_id, collection_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *
     `;
 
@@ -274,7 +274,8 @@ router.post('/generate-and-save', async (req, res) => {
       'created',
       'off-chain',
       userId,
-      userId
+      userId,
+      collection_id || null
     ];
 
     const dbResult = await pool.query(insertQuery, values);
@@ -311,9 +312,29 @@ router.post('/generate-and-save', async (req, res) => {
 // --- ENDPOINT 6: Listar todos os NFTs ---
 router.get('/list', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT nft_id, token_id, name, description, image_url, prompt, status, created_at FROM nfts ORDER BY created_at DESC'
-    );
+    const { userId } = req.query;
+    
+    console.log('🔍 GET /list - userId recebido:', userId);
+    
+    let query = 'SELECT nft_id, token_id, name, description, image_url, prompt, status, created_at, creator_id, collection_id FROM nfts';
+    let queryParams = [];
+    
+    if (userId) {
+      query += ' WHERE creator_id = $1';
+      queryParams.push(userId);
+      console.log('✅ Filtrando por creator_id:', userId);
+    } else {
+      console.log('⚠️ Nenhum userId fornecido, retornando todos os NFTs');
+    }
+    
+    query += ' ORDER BY created_at DESC';
+    
+    console.log('📝 Query SQL:', query);
+    console.log('📝 Parâmetros:', queryParams);
+    
+    const result = await pool.query(query, queryParams);
+
+    console.log('📦 NFTs encontrados:', result.rows.length);
 
     res.json({
       success: true,
@@ -360,6 +381,53 @@ router.get('/:nftId', async (req, res) => {
       message: 'Erro ao buscar NFT',
       error: error.message
     });
+  }
+});
+
+// Atualizar/definir a coleção de um NFT
+router.patch('/:nftId/collection', async (req, res) => {
+  try {
+    const { nftId } = req.params;
+    const { collection_id } = req.body; // pode ser null para remover
+    const userId = getUserIdFromAuthHeader(req);
+
+    // Buscar NFT
+    const nftRes = await pool.query(
+      `SELECT nft_id, token_id, creator_id, current_owner_id
+       FROM nfts
+       WHERE nft_id::text = $1 OR token_id = $1
+       LIMIT 1`,
+      [String(nftId)]
+    );
+
+    if (nftRes.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'NFT não encontrado' });
+    }
+
+    const nft = nftRes.rows[0];
+
+    // Autorização básica: se houver userId, deve ser criador ou dono atual
+    if (userId && userId !== nft.creator_id && userId !== nft.current_owner_id) {
+      return res.status(403).json({ success: false, message: 'Sem permissão para alterar este NFT' });
+    }
+
+    // Validar collection opcionalmente (se fornecida)
+    if (collection_id) {
+      const colRes = await pool.query('SELECT 1 FROM collections WHERE collection_id = $1', [collection_id]);
+      if (colRes.rows.length === 0) {
+        return res.status(400).json({ success: false, message: 'Coleção inválida' });
+      }
+    }
+
+    const upd = await pool.query(
+      'UPDATE nfts SET collection_id = $1, updated_at = NOW() WHERE nft_id = $2 RETURNING *',
+      [collection_id || null, nft.nft_id]
+    );
+
+    return res.json({ success: true, message: 'Coleção atualizada', nft: upd.rows[0] });
+  } catch (error) {
+    console.error('Erro ao atualizar coleção do NFT:', error);
+    res.status(500).json({ success: false, message: 'Erro ao atualizar coleção', error: error.message });
   }
 });
 

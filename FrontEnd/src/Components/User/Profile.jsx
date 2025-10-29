@@ -1,83 +1,114 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 import { API_BASE } from '../../config/api';
+// import { useNavigate } from 'react-router-dom';
+import Modal from '../Modal/Modal';
+import EditProfileModal from './EditProfileModal';
 
 const Container = styled.div`
-  max-width: 960px;
+  max-width: 1100px;
   margin: 24px auto;
-  padding: 20px;
-  background: rgba(30, 30, 31, 0.8);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 12px;
   color: #fff;
-  overflow: hidden; /* evita vazamento visual */
+  background: ${p => p.$bgColor || 'none'};
+  border-radius: 16px;
 `;
+
+const Banner = styled.div`
+  position: relative;
+  height: 260px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: ${p => p.$img ? `url(${p.$img}) center/cover no-repeat` : 'linear-gradient(135deg,#667eea,#764ba2)'};
+`;
+
+const EditOverlayBtn = styled.button`
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  background: rgba(0,0,0,0.35);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: background .2s ease, transform .1s ease;
+  &:hover { background: rgba(0,0,0,0.5); }
+  &:active { transform: translateY(1px); }
+`;
+
+const AvatarWrap = styled.div`
+  position: relative; height: 0;
+`;
+
+const Avatar = styled.div`
+  width: 140px; height: 140px; border-radius: 50%; overflow: hidden; border: 4px solid #1e1e1f;
+  position: relative; top: -70px; margin-left: 24px; box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  background: rgba(255,255,255,0.06);
+  img { width: 100%; height: 100%; object-fit: cover; display: block; }
+`;
+
+const Header = styled.div`
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: -60px;
+  padding: 0 24px 0;
+  padding-left: 180px; /* empurra o nome para a frente do avatar */
+  @media (max-width: 720px) {
+    margin-top: 0;
+    padding-left: 24px;
+  }
+`;
+
+const Info = styled.div`
+  display: flex; flex-direction: column; gap: 2px;
+`;
+
+const Name = styled.h2`
+  margin: 0; font-size: 1.8rem; line-height: 1.1;
+`;
+
+const Nick = styled.div`
+  opacity: .8;
+`;
+
+const Bio = styled.div`
+  padding: 0 24px;
+  margin-top: 32px;
+  opacity: .9;
+  max-width: 720px;
+`;
+
+/* Botão antigo removido do header; agora usamos o EditOverlayBtn sobre o banner */
 
 const Title = styled.h2`
   margin-top: 0;
 `;
 
 const Section = styled.div`
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255,255,255,0.08);
+  margin-top: 28px; padding: 0 24px;
 `;
 
-const Grid = styled.div`
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px;
-
-  @media (max-width: 720px) {
-    grid-template-columns: minmax(0, 1fr);
-  }
-`;
-
-const Field = styled.div`
+const Stats = styled.div`
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0; /* permite encolher dentro do grid */
+  gap: 12px;
+  padding: 8px 24px 0;
+  margin-top: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 `;
 
-const Label = styled.label`
-  font-size: 0.95rem;
-  color: rgba(255,255,255,0.85);
-`;
-
-const Input = styled.input`
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.15);
-  color: #fff;
-  border-radius: 8px;
-  padding: 10px 12px;
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box; /* evita exceder a largura do container */
-  display: block;
-`;
-
-const Select = styled.select`
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.15);
-  color: #fff;
-  border-radius: 8px;
-  padding: 10px 12px;
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-  display: block;
-`;
-
-const Button = styled.button`
-  background: #3f80ea;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  padding: 10px 14px;
-  margin-top: 10px;
-  cursor: pointer;
-  &:disabled { opacity: 0.6; cursor: not-allowed; }
+const Stat = styled.div`
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 8px 10px;
+  min-width: 100px;
+  span { display:block; font-size: .72rem; opacity: .8 }
+  b { display:block; font-size: 1rem; }
 `;
 
 const Message = styled.p`
@@ -111,14 +142,15 @@ const CardBody = styled.div`
 `;
 
 export default function Profile({ onRequireLogin }) {
+  // const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [form, setForm] = useState({ first_name: '', last_name: '', cep: '', address: '', gender: '' });
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
   const [created, setCreated] = useState([]);
   const [owned, setOwned] = useState([]);
+  const [collections, setCollections] = useState([]);
+  const [isEditOpen, setIsEditOpen] = useState(false);
 
   const token = useMemo(() => {
     try { return localStorage.getItem('token'); } catch { return null; }
@@ -133,19 +165,14 @@ export default function Profile({ onRequireLogin }) {
     }
 
     const load = async () => {
-      setLoading(true); setError(''); setMessage('');
+      setLoading(true); setError('');
       try {
-        const r = await fetch(`${API_BASE}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
+        const r = await fetch(`${API_BASE}/api/users/me/profile`, { headers: { Authorization: `Bearer ${token}` } });
         const d = await r.json();
         if (!r.ok) throw new Error(d.message || 'Falha ao carregar dados');
         setUser(d.user);
-        setForm({
-          first_name: d.user.first_name || '',
-          last_name: d.user.last_name || '',
-          cep: d.user.cep || '',
-          address: d.user.address || '',
-          gender: d.user.gender || ''
-        });
+        setProfile({ stats: d.stats });
+        setCollections(d.collections || []);
 
         const n = await fetch(`${API_BASE}/api/users/me/nfts`, { headers: { Authorization: `Bearer ${token}` } });
         const nd = await n.json();
@@ -162,80 +189,81 @@ export default function Profile({ onRequireLogin }) {
     load();
   }, [token, onRequireLogin]);
 
-  const onChange = (e) => {
-    const { name, value } = e.target;
-    setForm(prev => ({ ...prev, [name]: value }));
-  };
-
-  const onSave = async (e) => {
-    e.preventDefault();
-    setSaving(true); setError(''); setMessage('');
+  const reload = async () => {
     try {
-      const r = await fetch(`${API_BASE}/api/users/me`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(form)
-      });
+      const r = await fetch(`${API_BASE}/api/users/me/profile`, { headers: { Authorization: `Bearer ${token}` } });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.message || 'Falha ao salvar');
-      setUser(d.user);
-      setMessage('Perfil atualizado!');
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
-    }
+      if (r.ok) {
+        setUser(d.user);
+        setProfile({ stats: d.stats });
+        setCollections(d.collections || []);
+      }
+    } catch { /* ignore */ }
   };
 
-  if (loading) return <Container><p>Carregando...</p></Container>;
+  // Exemplo: cor predominante do banner (pode ser extraída via lib ou lógica própria)
+  // Aqui, só para exemplo, se o banner for escuro, usa um fundo escuro; senão, transparente.
+  let bgColor = 'none';
+  if (user?.banner_url && typeof user.banner_url === 'string' && user.banner_url.match(/black|preto|dark|escuro/)) {
+    bgColor = '#18181a';
+  }
+
+  if (loading) return <Container $bgColor={bgColor}><p>Carregando...</p></Container>;
 
   return (
-    <Container>
-      <Title>Seu Perfil</Title>
-
+    <>
+  <Container $bgColor={bgColor}>
       {error && <Message error>{error}</Message>}
-      {message && <Message>{message}</Message>}
 
       {user && (
         <>
-          <p><strong>Nome:</strong> {user.first_name} {user.last_name}</p>
-          <p><strong>Email:</strong> {user.email}</p>
-          <p><strong>Role:</strong> {user.role}</p>
+          <Banner $img={user.banner_url}>
+            <EditOverlayBtn onClick={() => setIsEditOpen(true)}>Editar Perfil</EditOverlayBtn>
+          </Banner>
+          <AvatarWrap>
+            <Avatar>
+              {user.avatar_url ? <img src={user.avatar_url} alt="Avatar" /> : null}
+            </Avatar>
+          </AvatarWrap>
+          {/* Stats agora ficam logo abaixo do banner, alinhados à direita */}
+          <Stats>
+            <Stat><span>NFTs criados</span><b>{profile?.stats?.created ?? created.length}</b></Stat>
+            <Stat><span>NFTs em propriedade</span><b>{profile?.stats?.owned ?? owned.length}</b></Stat>
+            <Stat><span>Coleções</span><b>{profile?.stats?.collections ?? 0}</b></Stat>
+            <Stat><span>Transações</span><b>{profile?.stats?.transactions ?? 0}</b></Stat>
+          </Stats>
+          <Header>
+            <Info>
+              <Name>{user.first_name} {user.last_name}</Name>
+              <Nick>{user.nickname ? `@${user.nickname.replace(/^@/, '')}` : user.email}</Nick>
+            </Info>
+          </Header>
+
+
+
+          {user.bio && (
+            <Bio>
+              {user.bio.length > 60
+                ? user.bio.slice(0, 60) + '...'
+                : user.bio}
+            </Bio>
+          )}
 
           <Section>
-            <h3>Editar Perfil</h3>
-            <form onSubmit={onSave}>
-              <Grid>
-                <Field>
-                  <Label htmlFor="first_name">Nome</Label>
-                  <Input id="first_name" name="first_name" value={form.first_name} onChange={onChange} placeholder="Nome" />
-                </Field>
-                <Field>
-                  <Label htmlFor="last_name">Sobrenome</Label>
-                  <Input id="last_name" name="last_name" value={form.last_name} onChange={onChange} placeholder="Sobrenome" />
-                </Field>
-                <Field>
-                  <Label htmlFor="cep">CEP</Label>
-                  <Input id="cep" name="cep" value={form.cep} onChange={onChange} placeholder="CEP" />
-                </Field>
-                <Field>
-                  <Label htmlFor="address">Endereço</Label>
-                  <Input id="address" name="address" value={form.address} onChange={onChange} placeholder="Endereço" />
-                </Field>
-                <Field>
-                  <Label htmlFor="gender">Gênero</Label>
-                  <Select id="gender" name="gender" value={form.gender} onChange={onChange}>
-                    <option value="">Selecione...</option>
-                    <option value="female">Feminino</option>
-                    <option value="male">Masculino</option>
-                  </Select>
-                </Field>
-              </Grid>
-              <Button type="submit" disabled={saving}>{saving ? 'Salvando...' : 'Salvar Alterações'}</Button>
-            </form>
+            <h3>Suas Coleções</h3>
+            {collections.length === 0 ? <p>Nenhuma coleção criada.</p> : (
+              <NftGrid>
+                {collections.map(c => (
+                  <Card key={c.collection_id}>
+                    <CardImg src={c.banner_image} alt={c.name} />
+                    <CardBody>
+                      <div style={{fontWeight:600}}>{c.name}</div>
+                      <div style={{opacity:0.8, fontSize:'0.9rem'}}>{c.nfts_count} itens</div>
+                    </CardBody>
+                  </Card>
+                ))}
+              </NftGrid>
+            )}
           </Section>
 
           <Section>
@@ -274,5 +302,10 @@ export default function Profile({ onRequireLogin }) {
         </>
       )}
     </Container>
+
+    <Modal isOpen={isEditOpen} onClose={() => setIsEditOpen(false)}>
+      <EditProfileModal initialUser={user} onClose={() => setIsEditOpen(false)} onSaved={reload} />
+    </Modal>
+  </>
   );
 }

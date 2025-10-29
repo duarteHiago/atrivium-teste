@@ -13,8 +13,12 @@ import WalletModal from './Components/WalletModal/WalletModal';
 import ProfileDropdown from './Components/ProfileDropdown/ProfileDropdown';
 import CreateNFT from './Components/CreateNFT/CreateNFT';
 import NftGallery from './Components/NftGallery/NftGallery';
+import CollectionBanner from './Components/CollectionBanner/CollectionBanner';
+import CollectionCarousel from './Components/CollectionBanner/CollectionCarousel';
 import Profile from './Components/User/Profile';
-import Gallery from './Components/Gallery/Gallery';
+import Settings from './Components/User/Settings';
+import Collections from './Components/Collections/Collections';
+import CollectionDetail from './Components/Collections/CollectionDetail';
 
 // 2. ATUALIZE OS ESTILOS PARA O EFEITO DE BLUR
 // Adiciona 'filter' e 'transition' quando um modal está aberto
@@ -284,6 +288,7 @@ function App() {
         <ProfileDropdown 
           onLogout={handleLogout}
           onGoProfile={() => { setIsProfileDropdownOpen(false); navigate('/profile'); }}
+          onGoSettings={() => { setIsProfileDropdownOpen(false); navigate('/settings'); }}
           onClose={() => setIsProfileDropdownOpen(false)}
         />
       )}
@@ -306,29 +311,18 @@ function App() {
           <Routes>
             <Route path="/admin" element={<Cms onClose={closeCms} />} />
             <Route path="/profile" element={<Profile onRequireLogin={() => setIsLoginModalOpen(true)} />} />
-            <Route path="/gallery" element={<Gallery />} />
+            <Route path="/settings" element={<Settings onRequireLogin={() => setIsLoginModalOpen(true)} />} />
             <Route path="/create-nft" element={<CreateNFT />} />
             <Route path="/gallery" element={<NftGallery />} />
+            <Route path="/collections" element={<Collections />} />
+            <Route path="/collections/:id" element={<CollectionDetail />} />
             <Route path="/" element={(
               <>
                 {/* ... (Todo o seu conteúdo da página Discover) ... */}
                 <HeroSection>
-                  <HeroPlaceholder>NFTs em Destaque (Carrossel)</HeroPlaceholder>
+                  <CollectionCarousel />
                 </HeroSection>
-                <Section>
-                  <SectionTitle>Coleções em Destaque</SectionTitle>
-                  <CardRow>
-                    {placeholderItems.map((item) => (
-                      <NftCard key={item}>
-                        <CardImagePlaceholder />
-                        <CardInfo>
-                          <PlaceholderText width="60%" />
-                          <PlaceholderText width="40%" height="16px" />
-                        </CardInfo>
-                      </NftCard>
-                    ))}
-                  </CardRow>
-                </Section>
+                {/* Coleções em Destaque removido. NFTs Gerados Recentemente agora é a primeira seção. */}
                 <Section>
                   <SectionTitle>🎨 NFTs Gerados Recentemente</SectionTitle>
                   <CardRow>

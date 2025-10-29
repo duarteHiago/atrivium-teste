@@ -6,6 +6,10 @@ const cors = require('cors');
 const { Pool } = require('pg'); // Driver do PostgreSQL
 const bcrypt = require('bcrypt'); // Para hash de senha
 const jwt = require('jsonwebtoken'); // Para gerar tokens JWT
+const sharp = require('sharp');
+const path = require('path');
+const fs = require('fs');
+const { upload, ensureDir } = require('./src/middleware/upload');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -15,6 +19,7 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 // Importar rotas
 const nftRoutes = require('./src/routes/nft.routes');
 const leonardoRoutes = require('./src/routes/leonardo.routes'); // Rotas da API Leonardo
+const collectionRoutes = require('./src/routes/collection.routes'); // Rotas de Coleções
 
 // Middlewares
 app.use(cors()); // Permite requisições do frontend
@@ -26,6 +31,7 @@ app.use('/uploads', express.static('uploads'));
 
 // Usar rotas
 app.use('/api/leonardo', leonardoRoutes); // Rotas da API Leonardo
+app.use('/api/collections', collectionRoutes); // Rotas de Coleções
 
 // Configuração da Conexão com o Banco de Dados (lê do .env)
 const pool = new Pool({
@@ -49,6 +55,13 @@ pool.query('SELECT NOW()', (err, res) => {
 (async () => {
   try {
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'user';`);
+    // Suporte a destaque de coleções em carrossel
+    await pool.query(`ALTER TABLE collections ADD COLUMN IF NOT EXISTS featured_order SMALLINT;`);
+    // Campos de perfil do usuário
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS nickname VARCHAR(50);`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS banner_url TEXT;`);
   } catch (e) {
     console.error('Erro ao ajustar schema de users (role):', e.message);
   }
@@ -236,7 +249,7 @@ function authMiddleware(req, res, next) {
 app.get('/api/auth/me', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.sub;
-    const q = `SELECT user_id, first_name, last_name, email, role FROM users WHERE user_id = $1`;
+    const q = `SELECT user_id, first_name, last_name, email, role, cep, address, gender, nickname, bio, avatar_url, banner_url FROM users WHERE user_id = $1`;
     const r = await pool.query(q, [userId]);
     if (r.rows.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.' });
     res.json({ user: r.rows[0] });
@@ -247,10 +260,13 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 });
 
 // Atualizar perfil do usuário autenticado
-app.patch('/api/users/me', authMiddleware, async (req, res) => {
+app.patch('/api/users/me', authMiddleware, upload.fields([
+  { name: 'avatar', maxCount: 1 },
+  { name: 'banner', maxCount: 1 }
+]), async (req, res) => {
   try {
     const userId = req.user.sub;
-    const { first_name, last_name, cep, address, gender } = req.body || {};
+    const { first_name, last_name, cep, address, gender, nickname, bio } = req.body || {};
 
     const fields = [];
     const values = [];
@@ -260,18 +276,82 @@ app.patch('/api/users/me', authMiddleware, async (req, res) => {
     if (typeof cep === 'string')        { fields.push(`cep = $${idx++}`); values.push(cep); }
     if (typeof address === 'string')    { fields.push(`address = $${idx++}`); values.push(address); }
     if (typeof gender === 'string')     { fields.push(`gender = $${idx++}`); values.push(gender); }
+    if (typeof nickname === 'string')   { fields.push(`nickname = $${idx++}`); values.push(nickname); }
+    if (typeof bio === 'string')        { fields.push(`bio = $${idx++}`); values.push(bio); }
+
+    // Processar uploads (avatar e banner) se enviados
+    const baseUrl = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
+    if (req.files?.avatar?.[0]?.buffer) {
+      const uploadDir = path.join(process.cwd(), 'uploads', 'users', 'avatars');
+      ensureDir(uploadDir);
+      const filename = `${userId}-avatar.webp`;
+      const target = path.join(uploadDir, filename);
+      await sharp(req.files.avatar[0].buffer)
+        .resize({ width: 320, height: 320, fit: 'cover', position: 'attention' })
+        .toFormat('webp')
+        .toFile(target);
+      const url = `${baseUrl}/uploads/users/avatars/${filename}`;
+      fields.push(`avatar_url = $${idx++}`); values.push(url);
+    }
+    if (req.files?.banner?.[0]?.buffer) {
+      const uploadDir = path.join(process.cwd(), 'uploads', 'users', 'banners');
+      ensureDir(uploadDir);
+      const filename = `${userId}-banner.webp`;
+      const target = path.join(uploadDir, filename);
+      await sharp(req.files.banner[0].buffer)
+        .resize({ width: 1600, height: 520, fit: 'cover', position: 'attention' })
+        .toFormat('webp')
+        .toFile(target);
+      const url = `${baseUrl}/uploads/users/banners/${filename}`;
+      fields.push(`banner_url = $${idx++}`); values.push(url);
+    }
 
     if (fields.length === 0) {
       return res.status(400).json({ message: 'Nenhum campo para atualizar.' });
     }
 
-    const updateSql = `UPDATE users SET ${fields.join(', ')}, updated_at = NOW() WHERE user_id = $${idx} RETURNING user_id, first_name, last_name, email, role, cep, address, gender`;
+  const updateSql = `UPDATE users SET ${fields.join(', ')}, updated_at = NOW() WHERE user_id = $${idx} RETURNING user_id, first_name, last_name, email, role, cep, address, gender, nickname, bio, avatar_url, banner_url`;
     values.push(userId);
     const r = await pool.query(updateSql, values);
     res.json({ message: 'Perfil atualizado com sucesso.', user: r.rows[0] });
   } catch (e) {
     console.error('Erro ao atualizar perfil:', e);
     res.status(500).json({ message: 'Erro ao atualizar perfil.' });
+  }
+});
+
+// Perfil enriquecido do usuário autenticado (dados + contagens + coleções)
+app.get('/api/users/me/profile', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const u = await pool.query(
+      `SELECT user_id, first_name, last_name, email, role, nickname, bio, avatar_url, banner_url
+       FROM users WHERE user_id = $1`, [userId]);
+    if (u.rows.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.' });
+
+    const createdCount = await pool.query(`SELECT COUNT(*)::int AS c FROM nfts WHERE creator_id = $1`, [userId]);
+    const ownedCount = await pool.query(`SELECT COUNT(*)::int AS c FROM nfts WHERE current_owner_id = $1`, [userId]);
+    const collectionsRes = await pool.query(
+      `SELECT c.collection_id, c.name, c.banner_image, c.created_at, COUNT(n.nft_id)::int AS nfts_count
+       FROM collections c
+       LEFT JOIN nfts n ON n.collection_id = c.collection_id
+       WHERE c.creator_id = $1
+       GROUP BY c.collection_id
+       ORDER BY c.created_at DESC`, [userId]);
+
+    res.json({
+      user: u.rows[0],
+      stats: {
+        created: createdCount.rows[0].c,
+        owned: ownedCount.rows[0].c,
+        collections: collectionsRes.rows.length,
+        transactions: 0
+      },
+      collections: collectionsRes.rows
+    });
+  } catch (e) {
+    console.error('Erro no profile enriquecido:', e);
+    res.status(500).json({ message: 'Erro ao carregar perfil.' });
   }
 });
 
@@ -371,6 +451,38 @@ app.patch('/api/admin/users/:id/role', authMiddleware, requireAdmin, async (req,
   }
 });
 
+// --- ADMIN: Definir coleções em destaque (carrossel de até 4) ---
+app.post('/api/admin/collections/featured-set', authMiddleware, requireAdmin, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { collectionIds } = req.body || {};
+    if (!Array.isArray(collectionIds)) {
+      return res.status(400).json({ message: 'collectionIds deve ser um array.' });
+    }
+    const ids = collectionIds.filter(id => typeof id === 'string').slice(0, 4);
+
+    await client.query('BEGIN');
+    // Zera destaques atuais
+    await client.query(`UPDATE collections SET is_featured = FALSE, featured_order = NULL WHERE is_featured = TRUE`);
+
+    // Define novos destaques preservando a ordem informada
+    for (let i = 0; i < ids.length; i++) {
+      await client.query(
+        `UPDATE collections SET is_featured = TRUE, featured_order = $1 WHERE collection_id = $2`,
+        [i + 1, ids[i]]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ message: 'Coleções em destaque atualizadas.', featured: ids });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('Erro ao definir destaques:', e);
+    res.status(500).json({ message: 'Erro ao definir coleções em destaque.' });
+  } finally {
+    client.release();
+  }
+});
 
 // Inicia o servidor
 app.listen(port, () => {

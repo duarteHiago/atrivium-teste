@@ -25,7 +25,7 @@ services:
   backend:
     build:
       context: ../BackEnd
-      dockerfile: Dockerfile
+      dockerfile: ../Docker/BackEnd/Dockerfile
     container_name: atrivium-backend
     environment:
       - PORT=3001
@@ -45,14 +45,14 @@ services:
       - atrivium-network
     volumes:
       - '../BackEnd:/app'           # Hot-reload: mapeia código local
-      - '/app/node_modules'         # Evita conflito com node_modules local
+      - '/app/node_modules'         # Usa node_modules do container (Linux), evitando conflito com Windows
     command: npm run dev            # Usa nodemon para hot-reload
 
   # Serviço do Frontend (React + Vite)
   frontend:
     build:
       context: ../FrontEnd
-      dockerfile: Dockerfile
+      dockerfile: ../Docker/FrontEnd/Dockerfile
     container_name: atrivium-frontend
     environment:
       - NODE_ENV=development

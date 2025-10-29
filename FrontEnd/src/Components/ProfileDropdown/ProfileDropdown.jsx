@@ -57,18 +57,18 @@ const MenuSeparator = styled.hr`
   margin: 6px 0;
 `;
 
-const ProfileDropdown = ({ onLogout, onGoProfile, onClose }) => {
+const ProfileDropdown = ({ onLogout, onGoProfile, onGoSettings, onClose }) => {
   return (
     <>
       <Backdrop onClick={onClose} />
       <DropdownMenu role="menu" aria-label="Profile menu">
-        <MenuItem as="button" onClick={onGoProfile} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>Profile</MenuItem>
+  <MenuItem as="button" onClick={onGoProfile} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>Profile</MenuItem>
         <MenuItem as="button" onClick={() => { window.history.pushState({}, '', '/gallery'); window.dispatchEvent(new PopStateEvent('popstate')); }} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>Galleries</MenuItem>
         <MenuItem href="#">NFTs</MenuItem>
       <MenuItem href="#">Listings</MenuItem>
       <MenuItem href="#">Portfolio</MenuItem>
       <MenuSeparator />
-      <MenuItem href="#">Settings</MenuItem>
+  <MenuItem as="button" onClick={onGoSettings} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>Settings</MenuItem>
       <MenuItem href="#" onClick={onLogout}>
         Sair (Logout)
       </MenuItem>

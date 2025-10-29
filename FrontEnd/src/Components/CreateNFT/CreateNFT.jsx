@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import styled from 'styled-components';
+import CollectionModal from '../CollectionModal/CollectionModal';
 import { API_BASE } from '../../config/api';
 
 const Container = styled.div`
@@ -107,6 +108,39 @@ const Button = styled.button`
   }
 `;
 
+const SecondaryButton = styled.button`
+  padding: 12px 20px;
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  font-size: 1em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+`;
+
+const SelectedCollectionBadge = styled.div`
+  padding: 8px 12px;
+  background: rgba(102, 126, 234, 0.2);
+  border: 1px solid rgba(102, 126, 234, 0.4);
+  border-radius: 6px;
+  color: #667eea;
+  font-size: 0.9em;
+  font-weight: 500;
+  display: inline-block;
+  margin-top: 8px;
+`;
+
 const LoadingContainer = styled.div`
   text-align: center;
   padding: 40px;
@@ -174,16 +208,27 @@ function CreateNFT() {
   const [formData, setFormData] = useState({
     prompt: '',
     name: '',
-    description: ''
+    description: '',
+    collection_id: null
   });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [isCollectionModalOpen, setIsCollectionModalOpen] = useState(false);
+  const [selectedCollection, setSelectedCollection] = useState(null);
 
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
+    });
+  };
+
+  const handleCollectionSelect = (collection) => {
+    setSelectedCollection(collection);
+    setFormData({
+      ...formData,
+      collection_id: collection?.collection_id || null
     });
   };
 
@@ -265,6 +310,22 @@ function CreateNFT() {
           />
         </InputGroup>
 
+        <InputGroup>
+          <Label>Coleção</Label>
+          <SecondaryButton 
+            type="button"
+            onClick={() => setIsCollectionModalOpen(true)}
+            disabled={loading}
+          >
+            📁 {selectedCollection ? 'Alterar Coleção' : 'Selecionar Coleção'}
+          </SecondaryButton>
+          {selectedCollection && (
+            <SelectedCollectionBadge>
+              ✓ {selectedCollection.name}
+            </SelectedCollectionBadge>
+          )}
+        </InputGroup>
+
         <Button type="submit" disabled={loading || !formData.prompt}>
           {loading ? 'Gerando...' : 'Gerar NFT'}
         </Button>
@@ -297,6 +358,12 @@ function CreateNFT() {
           </ResultInfo>
         </ResultContainer>
       )}
+
+      <CollectionModal 
+        isOpen={isCollectionModalOpen}
+        onClose={() => setIsCollectionModalOpen(false)}
+        onSelect={handleCollectionSelect}
+      />
     </Container>
   );
 }

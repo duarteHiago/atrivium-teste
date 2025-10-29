@@ -1,6 +1,7 @@
 import React from 'react';
 import styled from 'styled-components';
 import UserManagement from './UserManagement';
+import FeaturedCollections from './FeaturedCollections';
 
 const CmsContainer = styled.div`
   padding: 24px;
@@ -68,6 +69,13 @@ const Cms = ({ onClose }) => {
         <h2 style={{ margin: '10px 0' }}>Usuários e Permissões</h2>
         <p style={{ marginTop: 0, opacity: 0.8 }}>Liste e altere a role de cada usuário (user/admin).</p>
         <UserManagement />
+      </div>
+
+      {/* Destaques (carrossel da Discover) */}
+      <div style={{ marginTop: 28 }}>
+        <h2 style={{ margin: '10px 0' }}>Banner principal — Coleções em destaque</h2>
+        <p style={{ marginTop: 0, opacity: 0.8 }}>Escolha até 4 coleções e defina a ordem para o carrossel da Discover.</p>
+        <FeaturedCollections />
       </div>
     </CmsContainer>
   );
