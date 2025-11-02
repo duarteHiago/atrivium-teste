@@ -1,0 +1,1 @@
+// Mover o script original para cá se necessário

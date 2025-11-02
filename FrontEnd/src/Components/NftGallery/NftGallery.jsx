@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import styled from 'styled-components';
+import CollectionModal from '../CollectionModal/CollectionModal';
 
 const Container = styled.div`
   max-width: 1200px;
@@ -34,11 +35,71 @@ const NftCard = styled.div`
   overflow: hidden;
   transition: transform 0.3s, box-shadow 0.3s;
   cursor: pointer;
+  position: relative;
 
   &:hover {
     transform: translateY(-8px);
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
     border-color: #667eea;
+  }
+`;
+
+const AddCollectionButton = styled.button`
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 8px 10px;
+  font-size: 0.85em;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.2);
+  color: white;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  transition: all .2s;
+
+  &:hover {
+    background: rgba(0,0,0,0.5);
+    border-color: rgba(255,255,255,0.35);
+  }
+`;
+
+const CollectionTagButton = styled(AddCollectionButton)`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 70%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+const DropdownMenu = styled.div`
+  position: absolute;
+  left: 12px;
+  bottom: 50px;
+  background: rgba(20,20,21,0.98);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  min-width: 200px;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+  z-index: 101;
+  overflow: hidden;
+`;
+
+const DropdownItem = styled.button`
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  color: rgba(255,255,255,0.9);
+  border: none;
+  text-align: left;
+  font-size: 0.95em;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(255,255,255,0.06);
   }
 `;
 
@@ -110,6 +171,20 @@ const ErrorMessage = styled.div`
   margin: 20px 0;
 `;
 
+const Toast = styled.div`
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  background: ${p => p.$type === 'error' ? 'rgba(255, 77, 77, 0.15)' : 'rgba(16, 185, 129, 0.15)'};
+  border: 1px solid ${p => p.$type === 'error' ? 'rgba(255, 77, 77, 0.4)' : 'rgba(16, 185, 129, 0.4)'};
+  color: ${p => p.$type === 'error' ? '#ff6b6b' : '#34d399'};
+  padding: 10px 16px;
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+  z-index: 200;
+`;
+
 const RefreshButton = styled.button`
   padding: 10px 20px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -126,18 +201,73 @@ const RefreshButton = styled.button`
   }
 `;
 
+const FloatingButton = styled.button`
+  position: fixed;
+  bottom: 32px;
+  right: 32px;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 50px;
+  font-size: 1.1em;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 100;
+
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px rgba(102, 126, 234, 0.6);
+  }
+
+  &:active {
+    transform: translateY(-2px);
+  }
+`;
+
 function NftGallery() {
   const [nfts, setNfts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isCollectionModalOpen, setIsCollectionModalOpen] = useState(false);
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [selectedNft, setSelectedNft] = useState(null);
+  const [openDropdownNftId, setOpenDropdownNftId] = useState(null);
+  const [collectionNames, setCollectionNames] = useState({}); // { [collection_id]: name }
+  const [toast, setToast] = useState(null); // { message, type }
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 2200);
+  };
 
   const fetchNfts = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:3001/api/leonardo/list');
+      const userId = localStorage.getItem('creatorId');
+      
+      console.log('🔍 User ID do localStorage:', userId);
+      
+      if (!userId) {
+        setError('Você precisa estar logado para ver seus NFTs');
+        setLoading(false);
+        return;
+      }
+
+      const url = `http://localhost:3001/api/leonardo/list?userId=${userId}`;
+      console.log('📡 Fazendo requisição para:', url);
+      
+      const response = await fetch(url);
       const data = await response.json();
+
+      console.log('📦 Dados recebidos:', data);
 
       if (!response.ok) {
         throw new Error(data.message || 'Erro ao carregar NFTs');
@@ -145,6 +275,7 @@ function NftGallery() {
 
       setNfts(data.nfts);
     } catch (err) {
+      console.error('❌ Erro ao buscar NFTs:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -153,6 +284,33 @@ function NftGallery() {
 
   useEffect(() => {
     fetchNfts();
+  }, []);
+
+  // Fecha dropdown ao clicar fora
+  useEffect(() => {
+    const onDocClick = () => setOpenDropdownNftId(null);
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
+  }, []);
+
+  // Carrega nomes das coleções para mostrar no selo do card
+  useEffect(() => {
+    let active = true;
+    async function loadNames() {
+      try {
+        const res = await fetch('http://localhost:3001/api/collections/list');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Erro ao carregar coleções');
+        if (!active) return;
+        const map = {};
+        (data.collections || []).forEach(c => { map[c.collection_id] = c.name; });
+        setCollectionNames(map);
+      } catch {
+        // silencioso
+      }
+    }
+    loadNames();
+    return () => { active = false; };
   }, []);
 
   if (loading) {
@@ -167,9 +325,9 @@ function NftGallery() {
 
   return (
     <Container>
-      <Title>🖼️ Galeria de NFTs</Title>
+      <Title>🖼️ Minha Galeria</Title>
       <Subtitle>
-        {nfts.length} NFT{nfts.length !== 1 ? 's' : ''} gerado{nfts.length !== 1 ? 's' : ''}
+        {nfts.length} NFT{nfts.length !== 1 ? 's' : ''} criado{nfts.length !== 1 ? 's' : ''} por você
       </Subtitle>
 
       <RefreshButton onClick={fetchNfts}>
@@ -184,7 +342,7 @@ function NftGallery() {
 
       {nfts.length === 0 && !error && (
         <EmptyState>
-          Nenhum NFT encontrado. Gere seu primeiro NFT!
+          Você ainda não criou nenhum NFT. Comece agora!
         </EmptyState>
       )}
 
@@ -192,6 +350,55 @@ function NftGallery() {
         {nfts.map((nft) => (
           <NftCard key={nft.nft_id}>
             <NftImage src={nft.image_url} alt={nft.name} />
+            {nft.collection_id ? (
+              <>
+                <CollectionTagButton
+                  type="button"
+                  title={collectionNames[nft.collection_id] || 'Coleção'}
+                  onClick={(e) => { e.stopPropagation(); setOpenDropdownNftId(prev => prev === nft.nft_id ? null : nft.nft_id); }}
+                >
+                  📂 {collectionNames[nft.collection_id] || 'Coleção'} ▾
+                </CollectionTagButton>
+                {openDropdownNftId === nft.nft_id && (
+                  <DropdownMenu onClick={(e) => e.stopPropagation()}>
+                    <DropdownItem onClick={() => { setOpenDropdownNftId(null); setSelectedNft(nft); setIsAssignModalOpen(true); }}>
+                      Alterar coleção…
+                    </DropdownItem>
+                    <DropdownItem onClick={async () => {
+                      try {
+                        setOpenDropdownNftId(null);
+                        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+                        const res = await fetch(`http://localhost:3001/api/leonardo/${nft.nft_id}/collection`, {
+                          method: 'PATCH',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                          },
+                          body: JSON.stringify({ collection_id: null })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.message || 'Erro ao remover da coleção');
+                        await fetchNfts();
+                        showToast('Removido da coleção');
+                      } catch (err) {
+                        setError(err.message);
+                        showToast(err.message, 'error');
+                      }
+                    }}>
+                      Remover da coleção
+                    </DropdownItem>
+                  </DropdownMenu>
+                )}
+              </>
+            ) : (
+              <AddCollectionButton
+                type="button"
+                title="Adicionar a uma coleção"
+                onClick={(e) => { e.stopPropagation(); setSelectedNft(nft); setIsAssignModalOpen(true); }}
+              >
+                ➕ Coleção
+              </AddCollectionButton>
+            )}
             <NftInfo>
               <NftName>{nft.name}</NftName>
               <NftPrompt>{nft.prompt}</NftPrompt>
@@ -202,6 +409,61 @@ function NftGallery() {
           </NftCard>
         ))}
       </Grid>
+
+      <FloatingButton onClick={() => setIsCollectionModalOpen(true)}>
+        ➕ Criar Coleção
+      </FloatingButton>
+
+      <CollectionModal 
+        isOpen={isCollectionModalOpen}
+        onClose={() => setIsCollectionModalOpen(false)}
+        onSelect={(collection) => {
+          console.log('Coleção criada:', collection);
+          setIsCollectionModalOpen(false);
+        }}
+      />
+
+      {/* Modal para atribuir um NFT a uma coleção */}
+      <CollectionModal
+        isOpen={isAssignModalOpen}
+        onClose={() => { setIsAssignModalOpen(false); setSelectedNft(null); }}
+        onSelect={async (collection) => {
+          try {
+            if (!selectedNft) return;
+            const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+            const res = await fetch(`http://localhost:3001/api/leonardo/${selectedNft.nft_id}/collection`, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify({ collection_id: collection?.collection_id || null })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || 'Erro ao atribuir coleção');
+            console.log('✅ NFT adicionado à coleção:', data);
+            setIsAssignModalOpen(false);
+            setSelectedNft(null);
+            setOpenDropdownNftId(null);
+            // Recarrega a galeria para refletir na aba Collections também
+            await fetchNfts();
+            if (collection?.collection_id && collection?.name) {
+              setCollectionNames(prev => ({ ...prev, [collection.collection_id]: collection.name }));
+              showToast(`Adicionado à coleção: ${collection.name}`);
+            } else {
+              showToast('Coleção atualizada');
+            }
+          } catch (err) {
+            console.error('❌ Falha ao adicionar à coleção:', err);
+            setError(err.message);
+            showToast(err.message, 'error');
+          }
+        }}
+      />
+
+      {toast && (
+        <Toast $type={toast.type}>{toast.message}</Toast>
+      )}
     </Container>
   );
 }

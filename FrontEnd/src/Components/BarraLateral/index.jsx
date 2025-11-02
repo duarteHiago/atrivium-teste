@@ -94,24 +94,30 @@ const BarraLateral = ({ $isOpen, sidebarRef, onOpenCms, isAdmin = false, onGoHom
     <NavContainer ref={sidebarRef} $isOpen={$isOpen}>
       <MenuList>
         <MenuText onClick={() => { if (typeof onGoHome === 'function') onGoHome(); }}>Discover</MenuText>
-        <MenuItem href="#">Collections</MenuItem>
+        <MenuItem
+          as="button"
+          onClick={() => { try { window.location.hash = ''; } catch { /* ignore */ } window.history.pushState({}, '', '/collections'); window.dispatchEvent(new PopStateEvent('popstate')); }}
+        >
+          Collections
+        </MenuItem>
         <MenuItem href="#">Tokens</MenuItem>
         <MenuItem href="#">Drops</MenuItem>
         <MenuItem href="#">Activity</MenuItem>
-        <MenuItem href="#">Profile</MenuItem>
+  <MenuItem as="button" onClick={() => { try { window.location.hash = ''; } catch { /* ignore */ } window.history.pushState({}, '', '/profile'); window.dispatchEvent(new PopStateEvent('popstate')); }}>Profile</MenuItem>
       </MenuList>
 
-      {/* Footer com o botão CMS fixo na parte de baixo */}
-      <Footer>
-        <div style={{ marginTop: 6, borderTop: '1px solid rgba(255,255,255,0.04)' }} />
-        <AdminButton
-          onClick={() => { if (isAdmin && typeof onOpenCms === 'function') onOpenCms(); }}
-          disabled={!isAdmin}
-          title={isAdmin ? 'Abrir CMS' : 'Acesso restrito a administradores'}
-        >
-          CMS — Gerenciamento
-        </AdminButton>
-      </Footer>
+      {/* Footer com o botão CMS somente para admin */}
+      {isAdmin && (
+        <Footer>
+          <div style={{ marginTop: 6, borderTop: '1px solid rgba(255,255,255,0.04)' }} />
+          <AdminButton
+            onClick={() => { if (typeof onOpenCms === 'function') onOpenCms(); }}
+            title="Abrir CMS"
+          >
+            CMS — Gerenciamento
+          </AdminButton>
+        </Footer>
+      )}
     </NavContainer>
   );
 };
