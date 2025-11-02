@@ -23,6 +23,14 @@ dist-ssr
 *.sln
 *.sw?
 
-# Variáveis de ambiente
-**/backend/.env
+## Variáveis de ambiente
+**/.env
 BackEnd/.env
+FrontEnd/.env
+
+## Dados do Postgres (não versionar)
+DataBase/postgres-data/
+DataBase/postgres-data/**
+
+## Uploads locais (não versionar)
+BackEnd/uploads/
