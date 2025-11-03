@@ -20,6 +20,8 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 const nftRoutes = require('./src/routes/nft.routes');
 const leonardoRoutes = require('./src/routes/leonardo.routes'); // Rotas da API Leonardo
 const collectionRoutes = require('./src/routes/collection.routes'); // Rotas de Coleções
+const ipfsRoutes = require('./src/routes/ipfs.routes'); // Rotas IPFS/Pinata
+const walletRoutes = require('./src/routes/wallet.routes'); // Rotas de Carteira
 
 // Middlewares
 app.use(cors()); // Permite requisições do frontend
@@ -32,6 +34,16 @@ app.use('/uploads', express.static('uploads'));
 // Usar rotas
 app.use('/api/leonardo', leonardoRoutes); // Rotas da API Leonardo
 app.use('/api/collections', collectionRoutes); // Rotas de Coleções
+console.log('📍 Registrando rotas IPFS em /api/ipfs');
+app.use('/api/ipfs', ipfsRoutes); // Rotas IPFS/Pinata
+console.log('✅ Rotas IPFS registradas');
+app.use('/api/wallet', walletRoutes); // Rotas de Carteira
+console.log('✅ Rotas de Carteira registradas');
+
+// Rota de teste simples
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'Servidor funcionando!' });
+});
 
 // Configuração da Conexão com o Banco de Dados (lê do .env)
 const pool = new Pool({
@@ -78,6 +90,11 @@ pool.query('SELECT NOW()', (err, res) => {
     // Relacionamento em nfts para collection (se ainda não existir)
     await pool.query(`ALTER TABLE nfts ADD COLUMN IF NOT EXISTS collection_id UUID REFERENCES collections(collection_id) ON DELETE SET NULL;`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_nfts_collection ON nfts(collection_id);`);
+
+    // Campos IPFS em nfts
+    await pool.query(`ALTER TABLE nfts ADD COLUMN IF NOT EXISTS ipfs_hash VARCHAR(100);`);
+    await pool.query(`ALTER TABLE nfts ADD COLUMN IF NOT EXISTS network VARCHAR(20) DEFAULT 'off-chain';`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_nfts_ipfs ON nfts(ipfs_hash);`);
   } catch (e) {
     console.error('Erro ao ajustar schema de users (role):', e.message);
   }
@@ -368,9 +385,16 @@ app.get('/api/users/me/profile', authMiddleware, async (req, res) => {
     let collectionsRows = [];
     try {
       const r = await pool.query(
-        `SELECT c.collection_id, c.name, c.cover_image_url AS banner_image, c.created_at, COUNT(n.nft_id)::int AS nfts_count
+        `SELECT c.collection_id, c.name, c.cover_image_url AS banner_url, c.created_at, 
+                COUNT(DISTINCT n.nft_id)::int AS nfts_count,
+                COALESCE(SUM(fav_counts.total), 0)::int AS total_favorites
          FROM collections c
          LEFT JOIN nfts n ON n.collection_id = c.collection_id
+         LEFT JOIN (
+           SELECT nft_id, COUNT(*)::int AS total 
+           FROM nft_favorites 
+           GROUP BY nft_id
+         ) fav_counts ON fav_counts.nft_id = n.nft_id
          WHERE c.creator_id = $1
          GROUP BY c.collection_id
          ORDER BY c.created_at DESC`, [userId]);
@@ -384,8 +408,8 @@ app.get('/api/users/me/profile', authMiddleware, async (req, res) => {
            WHERE c.creator_id = $1
            GROUP BY c.collection_id
            ORDER BY c.created_at DESC`, [userId]);
-        // Compat: banner_image ausente
-        collectionsRows = r2.rows.map(row => ({ ...row, banner_image: null }));
+        // Compat: banner_url ausente
+        collectionsRows = r2.rows.map(row => ({ ...row, banner_url: null }));
       } else {
         throw err;
       }
@@ -404,6 +428,107 @@ app.get('/api/users/me/profile', authMiddleware, async (req, res) => {
   } catch (e) {
     console.error('Erro no profile enriquecido:', e);
     res.status(500).json({ message: 'Erro ao carregar perfil.' });
+  }
+});
+
+// Perfil público por ID (somente campos não sensíveis)
+app.get('/api/users/:id/public-profile', async (req, res) => {
+  try {
+    const targetId = req.params.id;
+    if (!targetId) return res.status(400).json({ message: 'ID do usuário é obrigatório.' });
+
+    // Busca dados públicos do usuário
+    let userRow;
+    try {
+      const u = await pool.query(
+        `SELECT user_id, first_name, last_name, email, nickname, bio, avatar_url, banner_url
+         FROM users WHERE user_id = $1`, [targetId]);
+      userRow = u.rows[0];
+    } catch (err) {
+      if (err.code === '42703') {
+        const u2 = await pool.query(
+          `SELECT user_id, first_name, last_name, email
+           FROM users WHERE user_id = $1`, [targetId]);
+        userRow = u2.rows[0];
+      } else {
+        throw err;
+      }
+    }
+    if (!userRow) return res.status(404).json({ message: 'Usuário não encontrado.' });
+
+    // Contagens básicas
+    const createdCount = await pool.query(`SELECT COUNT(*)::int AS c FROM nfts WHERE creator_id = $1`, [targetId]);
+    const ownedCount = await pool.query(`SELECT COUNT(*)::int AS c FROM nfts WHERE current_owner_id = $1`, [targetId]);
+
+    // Coleções do usuário (público)
+    let collectionsRows = [];
+    try {
+      const r = await pool.query(
+        `SELECT c.collection_id, c.name, c.cover_image_url AS banner_url, c.created_at, 
+                COUNT(DISTINCT n.nft_id)::int AS nfts_count,
+                COALESCE(SUM(fav_counts.total), 0)::int AS total_favorites
+         FROM collections c
+         LEFT JOIN nfts n ON n.collection_id = c.collection_id
+         LEFT JOIN (
+           SELECT nft_id, COUNT(*)::int AS total 
+           FROM nft_favorites 
+           GROUP BY nft_id
+         ) fav_counts ON fav_counts.nft_id = n.nft_id
+         WHERE c.creator_id = $1
+         GROUP BY c.collection_id
+         ORDER BY c.created_at DESC`, [targetId]);
+      collectionsRows = r.rows;
+    } catch (err) {
+      if (err.code === '42703' || err.code === '42P01') {
+        const r2 = await pool.query(
+          `SELECT c.collection_id, c.name, c.created_at, COUNT(n.nft_id)::int AS nfts_count
+           FROM collections c
+           LEFT JOIN nfts n ON n.collection_id = c.collection_id
+           WHERE c.creator_id = $1
+           GROUP BY c.collection_id
+           ORDER BY c.created_at DESC`, [targetId]);
+        collectionsRows = r2.rows.map(row => ({ ...row, banner_url: null }));
+      } else {
+        throw err;
+      }
+    }
+
+    // NFTs criados
+    const createdNfts = await pool.query(
+      `SELECT n.nft_id, n.token_id, n.name, n.description, n.image_url, n.prompt, n.status, n.created_at,
+              COUNT(f.favorite_id)::int as favorites_count
+       FROM nfts n
+       LEFT JOIN nft_favorites f ON n.nft_id = f.nft_id
+       WHERE n.creator_id = $1
+       GROUP BY n.nft_id
+       ORDER BY n.created_at DESC
+       LIMIT 20`, [targetId]);
+
+    // NFTs possuídos
+    const ownedNfts = await pool.query(
+      `SELECT n.nft_id, n.token_id, n.name, n.description, n.image_url, n.prompt, n.status, n.created_at,
+              COUNT(f.favorite_id)::int as favorites_count
+       FROM nfts n
+       LEFT JOIN nft_favorites f ON n.nft_id = f.nft_id
+       WHERE n.current_owner_id = $1
+       GROUP BY n.nft_id
+       ORDER BY n.created_at DESC
+       LIMIT 20`, [targetId]);
+
+    return res.json({
+      user: userRow,
+      stats: {
+        created: createdCount.rows[0]?.c ?? 0,
+        owned: ownedCount.rows[0]?.c ?? 0,
+        collections: collectionsRows.length
+      },
+      collections: collectionsRows,
+      created: createdNfts.rows,
+      owned: ownedNfts.rows
+    });
+  } catch (e) {
+    console.error('Erro no perfil público:', e);
+    res.status(500).json({ message: 'Erro ao carregar perfil público.' });
   }
 });
 
@@ -432,16 +557,16 @@ app.get('/api/users/me/nfts', authMiddleware, async (req, res) => {
   }
 });
 
-// Galeria do usuário (NFTs criados + possuídos sem duplicatas)
+// Galeria do usuário (apenas NFTs que possui atualmente)
 app.get('/api/users/me/gallery', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.sub;
-    // União de NFTs criados e possuídos, sem duplicatas
+    // Apenas NFTs que o usuário possui atualmente (current_owner_id)
     const r = await pool.query(
-      `SELECT DISTINCT ON (nft_id) nft_id, token_id, name, description, image_url, prompt, style, status, created_at, creator_id, current_owner_id
+      `SELECT nft_id, token_id, name, description, image_url, prompt, style, status, created_at, creator_id, current_owner_id, collection_id
        FROM nfts 
-       WHERE creator_id = $1 OR current_owner_id = $1 
-       ORDER BY nft_id, created_at DESC`, [userId]);
+       WHERE current_owner_id = $1 
+       ORDER BY created_at DESC`, [userId]);
     res.json({ nfts: r.rows, total: r.rows.length });
   } catch (e) {
     console.error('Erro ao listar galeria:', e);
