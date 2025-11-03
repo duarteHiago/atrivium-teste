@@ -111,9 +111,13 @@ const BarraLateral = ({ $isOpen, sidebarRef, onOpenCms, isAdmin = false, onGoHom
         >
           🛒 Marketplace
         </MenuItem>
-        <MenuItem href="#">Tokens</MenuItem>
-        <MenuItem href="#">Drops</MenuItem>
-        <MenuItem href="#">Activity</MenuItem>
+  {/* Itens removidos: Tokens, Drops */}
+        <MenuItem
+          as="button"
+          onClick={() => { try { window.location.hash = ''; } catch { /* ignore */ } window.history.pushState({}, '', '/activity'); window.dispatchEvent(new PopStateEvent('popstate')); }}
+        >
+          Activity
+        </MenuItem>
   <MenuItem as="button" onClick={() => { try { window.location.hash = ''; } catch { /* ignore */ } window.history.pushState({}, '', '/profile'); window.dispatchEvent(new PopStateEvent('popstate')); }}>Profile</MenuItem>
       </MenuList>
 

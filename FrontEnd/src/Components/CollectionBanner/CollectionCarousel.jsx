@@ -251,7 +251,7 @@ export default function CollectionCarousel(){
                   </StatItem>
                   <StatItem>
                     <span>LISTED</span>
-                    <b>1.2%</b>
+                    <b>{Number.parseFloat(it.collection.listed_percent || 0).toFixed(1)}%</b>
                   </StatItem>
                 </StatsBox>
               </Info>

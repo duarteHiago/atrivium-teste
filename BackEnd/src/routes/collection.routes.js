@@ -151,7 +151,38 @@ router.get('/list', async (req, res) => {
         (COALESCE(u.first_name,'') || CASE WHEN u.last_name IS NOT NULL THEN ' ' || u.last_name ELSE '' END) AS creator_name,
         COUNT(DISTINCT n.nft_id) as nfts_count,
         u.cpf as creator_cpf,
-        COALESCE(SUM(fav_counts.total), 0)::int AS total_favorites
+        COALESCE(SUM(fav_counts.total), 0)::int AS total_favorites,
+        -- Métricas dinâmicas por coleção
+        (
+          SELECT MIN(n2.price)::float
+          FROM nfts n2
+          WHERE n2.collection_id = c.collection_id
+            AND n2.price IS NOT NULL AND n2.price > 0
+            AND n2.status IN ('listed','for_sale')
+        ) AS floor_price_calc,
+        (
+          SELECT COALESCE(SUM(t.amount_eth), 0)::float
+          FROM transactions t
+          JOIN nfts n3 ON n3.nft_id = t.nft_id
+          WHERE n3.collection_id = c.collection_id
+            AND t.transaction_type IN ('nft_sale')
+        ) AS total_volume_calc,
+        (
+          SELECT COUNT(*)::int
+          FROM nfts n4
+          WHERE n4.collection_id = c.collection_id
+            AND n4.status IN ('listed','for_sale')
+        ) AS listed_count,
+        CASE WHEN COUNT(DISTINCT n.nft_id) = 0 THEN 0
+             ELSE ROUND((
+               (
+                 SELECT COUNT(*)
+                 FROM nfts n5
+                 WHERE n5.collection_id = c.collection_id
+                   AND n5.status IN ('listed','for_sale')
+               )::numeric * 100
+             ) / COUNT(DISTINCT n.nft_id), 2)::float
+        END AS listed_percent
       FROM collections c
       LEFT JOIN nfts n ON c.collection_id = n.collection_id
       LEFT JOIN users u ON c.creator_id = u.user_id
@@ -180,10 +211,17 @@ router.get('/list', async (req, res) => {
 
     const result = await pool.query(query, params);
 
+    // Normaliza métricas calculadas sobrescrevendo valores antigos se necessário
+    const rows = result.rows.map(r => ({
+      ...r,
+      floor_price: r.floor_price_calc != null ? r.floor_price_calc : r.floor_price,
+      total_volume: r.total_volume_calc != null ? r.total_volume_calc : r.total_volume
+    }));
+
     res.json({
       success: true,
-      collections: result.rows,
-      total: result.rows.length
+      collections: rows,
+      total: rows.length
     });
 
   } catch (error) {
@@ -206,8 +244,30 @@ router.get('/featured', async (req, res) => {
         c.cover_image_url AS banner_image,
         u.first_name, u.last_name,
         (COALESCE(u.first_name,'') || CASE WHEN u.last_name IS NOT NULL THEN ' ' || u.last_name ELSE '' END) AS creator_name,
-        COUNT(n.nft_id) as nfts_count,
-        u.cpf as creator_cpf
+        COUNT(DISTINCT n.nft_id) as nfts_count,
+        u.cpf as creator_cpf,
+        (
+          SELECT MIN(n2.price)::float FROM nfts n2
+          WHERE n2.collection_id = c.collection_id AND n2.price IS NOT NULL AND n2.price > 0
+            AND n2.status IN ('listed','for_sale')
+        ) AS floor_price_calc,
+        (
+          SELECT COALESCE(SUM(t.amount_eth), 0)::float
+          FROM transactions t JOIN nfts n3 ON n3.nft_id = t.nft_id
+          WHERE n3.collection_id = c.collection_id AND t.transaction_type IN ('nft_sale')
+        ) AS total_volume_calc,
+        (
+          SELECT COUNT(*)::int FROM nfts n4
+          WHERE n4.collection_id = c.collection_id AND n4.status IN ('listed','for_sale')
+        ) AS listed_count,
+        CASE WHEN COUNT(DISTINCT n.nft_id) = 0 THEN 0
+             ELSE ROUND((
+               (
+                 SELECT COUNT(*) FROM nfts n5
+                 WHERE n5.collection_id = c.collection_id AND n5.status IN ('listed','for_sale')
+               )::numeric * 100
+             ) / COUNT(DISTINCT n.nft_id), 2)::float
+        END AS listed_percent
       FROM collections c
       LEFT JOIN nfts n ON c.collection_id = n.collection_id
       LEFT JOIN users u ON c.creator_id = u.user_id
@@ -217,7 +277,7 @@ router.get('/featured', async (req, res) => {
       LIMIT 1
     `;
 
-    const collectionResult = await pool.query(collectionQuery);
+  const collectionResult = await pool.query(collectionQuery);
 
     if (collectionResult.rows.length === 0) {
       return res.json({
@@ -227,7 +287,12 @@ router.get('/featured', async (req, res) => {
       });
     }
 
-    const collection = collectionResult.rows[0];
+    const collectionRaw = collectionResult.rows[0];
+    const collection = {
+      ...collectionRaw,
+      floor_price: collectionRaw.floor_price_calc != null ? collectionRaw.floor_price_calc : collectionRaw.floor_price,
+      total_volume: collectionRaw.total_volume_calc != null ? collectionRaw.total_volume_calc : collectionRaw.total_volume,
+    };
 
     // Busca os NFTs dessa coleção (limite de 4 para preview)
     const nftsQuery = `
@@ -265,7 +330,29 @@ router.get('/featured-list', async (req, res) => {
              (COALESCE(u.first_name,'') || CASE WHEN u.last_name IS NOT NULL THEN ' ' || u.last_name ELSE '' END) AS creator_name,
              COUNT(DISTINCT n.nft_id) as nfts_count, 
              u.cpf as creator_cpf,
-             COALESCE(SUM(fav_counts.total), 0)::int AS total_favorites
+             COALESCE(SUM(fav_counts.total), 0)::int AS total_favorites,
+             (
+               SELECT MIN(n2.price)::float FROM nfts n2
+               WHERE n2.collection_id = c.collection_id AND n2.price IS NOT NULL AND n2.price > 0
+                 AND n2.status IN ('listed','for_sale')
+             ) AS floor_price_calc,
+             (
+               SELECT COALESCE(SUM(t.amount_eth), 0)::float
+               FROM transactions t JOIN nfts n3 ON n3.nft_id = t.nft_id
+               WHERE n3.collection_id = c.collection_id AND t.transaction_type IN ('nft_sale')
+             ) AS total_volume_calc,
+             (
+               SELECT COUNT(*)::int FROM nfts n4
+               WHERE n4.collection_id = c.collection_id AND n4.status IN ('listed','for_sale')
+             ) AS listed_count,
+             CASE WHEN COUNT(DISTINCT n.nft_id) = 0 THEN 0
+                  ELSE ROUND((
+                    (
+                      SELECT COUNT(*) FROM nfts n5
+                      WHERE n5.collection_id = c.collection_id AND n5.status IN ('listed','for_sale')
+                    )::numeric * 100
+                  ) / COUNT(DISTINCT n.nft_id), 2)::float
+             END AS listed_percent
       FROM collections c
       LEFT JOIN nfts n ON c.collection_id = n.collection_id
       LEFT JOIN users u ON c.creator_id = u.user_id
@@ -280,7 +367,11 @@ router.get('/featured-list', async (req, res) => {
       LIMIT 4
     `;
     const collectionsRes = await pool.query(collectionsQuery);
-    const collections = collectionsRes.rows;
+    const collections = collectionsRes.rows.map(r => ({
+      ...r,
+      floor_price: r.floor_price_calc != null ? r.floor_price_calc : r.floor_price,
+      total_volume: r.total_volume_calc != null ? r.total_volume_calc : r.total_volume,
+    }));
 
     // Busca previews (até 3) para cada coleção — aleatórios
     const previewsByCollection = {};
@@ -370,7 +461,29 @@ router.get('/:collectionId', async (req, res) => {
         (COALESCE(u.first_name,'') || CASE WHEN u.last_name IS NOT NULL THEN ' ' || u.last_name ELSE '' END) AS creator_name,
         COUNT(DISTINCT n.nft_id) as nfts_count,
         u.cpf as creator_cpf,
-        COALESCE(SUM(fav_counts.total), 0)::int AS total_favorites
+        COALESCE(SUM(fav_counts.total), 0)::int AS total_favorites,
+        (
+          SELECT MIN(n2.price)::float FROM nfts n2
+          WHERE n2.collection_id = c.collection_id AND n2.price IS NOT NULL AND n2.price > 0
+            AND n2.status IN ('listed','for_sale')
+        ) AS floor_price_calc,
+        (
+          SELECT COALESCE(SUM(t.amount_eth), 0)::float
+          FROM transactions t JOIN nfts n3 ON n3.nft_id = t.nft_id
+          WHERE n3.collection_id = c.collection_id AND t.transaction_type IN ('nft_sale')
+        ) AS total_volume_calc,
+        (
+          SELECT COUNT(*)::int FROM nfts n4
+          WHERE n4.collection_id = c.collection_id AND n4.status IN ('listed','for_sale')
+        ) AS listed_count,
+        CASE WHEN COUNT(DISTINCT n.nft_id) = 0 THEN 0
+             ELSE ROUND((
+               (
+                 SELECT COUNT(*) FROM nfts n5
+                 WHERE n5.collection_id = c.collection_id AND n5.status IN ('listed','for_sale')
+               )::numeric * 100
+             ) / COUNT(DISTINCT n.nft_id), 2)::float
+        END AS listed_percent
       FROM collections c
       LEFT JOIN nfts n ON c.collection_id = n.collection_id
       LEFT JOIN users u ON c.creator_id = u.user_id
@@ -383,7 +496,7 @@ router.get('/:collectionId', async (req, res) => {
       GROUP BY c.collection_id, u.cpf, u.first_name, u.last_name
     `;
 
-    const result = await pool.query(query, [collectionId]);
+  const result = await pool.query(query, [collectionId]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -392,10 +505,15 @@ router.get('/:collectionId', async (req, res) => {
       });
     }
 
-    res.json({
-      success: true,
-      collection: result.rows[0]
-    });
+    if (result.rows.length > 0) {
+      const r = result.rows[0];
+      const normalized = {
+        ...r,
+        floor_price: r.floor_price_calc != null ? r.floor_price_calc : r.floor_price,
+        total_volume: r.total_volume_calc != null ? r.total_volume_calc : r.total_volume,
+      };
+      return res.json({ success: true, collection: normalized });
+    }
 
   } catch (error) {
     console.error('Erro ao buscar coleção:', error);

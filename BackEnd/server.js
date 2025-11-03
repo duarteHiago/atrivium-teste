@@ -431,6 +431,108 @@ app.get('/api/users/me/profile', authMiddleware, async (req, res) => {
   }
 });
 
+// Atividade do usuário autenticado (compras, vendas e criações)
+app.get('/api/users/me/activity', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 30;
+    const offset = (page - 1) * limit;
+
+    // Consulta unificada: transações (compras/vendas) + criações
+    // 1) Transações em que o usuário participou (compras/vendas)
+    const txQuery = `
+      SELECT 
+        t.transaction_id,
+        t.created_at,
+        t.amount_eth,
+        t.from_user_id,
+        t.to_user_id,
+        n.nft_id,
+        n.name AS nft_name,
+        n.image_url AS nft_image_url,
+        c.name AS collection_name,
+        fu.first_name AS from_first_name,
+        fu.last_name AS from_last_name,
+        fu.nickname AS from_nickname,
+        fu.avatar_url AS from_avatar,
+        tu.first_name AS to_first_name,
+        tu.last_name AS to_last_name,
+        tu.nickname AS to_nickname,
+        tu.avatar_url AS to_avatar
+      FROM transactions t
+      LEFT JOIN nfts n ON n.nft_id = t.nft_id
+      LEFT JOIN collections c ON n.collection_id = c.collection_id
+      LEFT JOIN users fu ON fu.user_id = t.from_user_id
+      LEFT JOIN users tu ON tu.user_id = t.to_user_id
+      WHERE t.transaction_type = 'nft_sale'
+        AND (t.from_user_id = $1::uuid OR t.to_user_id = $1::uuid)
+      ORDER BY t.created_at DESC
+      LIMIT $2 OFFSET $3
+    `;
+    const txResult = await pool.query(txQuery, [userId, limit, offset]);
+
+    const txItems = txResult.rows.map(row => ({
+      event_type: String(row.from_user_id) === String(userId) ? 'sold' : 'bought',
+      created_at: row.created_at,
+      transaction_id: row.transaction_id,
+      amount_eth: row.amount_eth !== null ? parseFloat(row.amount_eth) : null,
+      nft: row.nft_id ? {
+        nft_id: row.nft_id,
+        name: row.nft_name,
+        image_url: row.nft_image_url,
+        collection_name: row.collection_name || null
+      } : null,
+      from_user: row.from_user_id ? {
+        user_id: row.from_user_id,
+        name: row.from_nickname || `${row.from_first_name || ''} ${row.from_last_name || ''}`.trim(),
+        avatar_url: row.from_avatar || null
+      } : null,
+      to_user: row.to_user_id ? {
+        user_id: row.to_user_id,
+        name: row.to_nickname || `${row.to_first_name || ''} ${row.to_last_name || ''}`.trim(),
+        avatar_url: row.to_avatar || null
+      } : null
+    }));
+
+    // 2) Criações do usuário (sem paginação aqui; paginaremos após merge)
+    const createdQuery = `
+      SELECT n.nft_id, n.name AS nft_name, n.image_url AS nft_image_url, n.created_at,
+             c.name AS collection_name
+      FROM nfts n
+      LEFT JOIN collections c ON n.collection_id = c.collection_id
+      WHERE n.creator_id = $1::uuid
+      ORDER BY n.created_at DESC
+      LIMIT 200
+    `;
+    const createdRes = await pool.query(createdQuery, [userId]);
+    const createdItems = createdRes.rows.map(row => ({
+      event_type: 'created',
+      created_at: row.created_at,
+      transaction_id: null,
+      amount_eth: null,
+      nft: {
+        nft_id: row.nft_id,
+        name: row.nft_name,
+        image_url: row.nft_image_url,
+        collection_name: row.collection_name || null
+      },
+      from_user: null,
+      to_user: null
+    }));
+
+    // 3) Merge, ordenar e paginar
+    const merged = [...txItems, ...createdItems]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const activity = merged.slice(offset, offset + limit);
+
+    res.json({ success: true, activity, pagination: { page, limit } });
+  } catch (e) {
+    console.error('Erro ao carregar atividade do usuário:', e?.message || e);
+    res.status(500).json({ success: false, message: 'Erro ao carregar atividade.' });
+  }
+});
+
 // Perfil público por ID (somente campos não sensíveis)
 app.get('/api/users/:id/public-profile', async (req, res) => {
   try {
@@ -662,6 +764,12 @@ app.post('/api/admin/collections/featured-set', authMiddleware, requireAdmin, as
 });
 
 // Inicia o servidor
-app.listen(port, () => {
+const server = app.listen(port, '0.0.0.0', () => {
   console.log(`Servidor backend rodando na porta ${port}`);
+  console.log(`Acesse: http://localhost:${port}/api/test`);
+});
+
+server.on('error', (err) => {
+  console.error('Erro ao iniciar servidor:', err);
+  process.exit(1);
 });

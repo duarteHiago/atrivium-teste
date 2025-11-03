@@ -381,18 +381,18 @@ router.get('/:nftId/suggested-price', async (req, res) => {
   }
 });
 
-// PATCH /api/nft/:nftId/price - Atualiza preço (e opcionalmente status) do NFT
+// PATCH /api/nft/:nftId/price - Atualiza preço (e opcionalmente status e buy_now_price) do NFT
 router.patch('/:nftId/price', async (req, res) => {
   try {
     const { nftId } = req.params;
-    const { price, status } = req.body || {};
+    const { price, buy_now_price, status } = req.body || {};
     const userId = getUserIdFromToken(req);
 
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Não autenticado.' });
     }
 
-    const nftQ = await pool.query('SELECT nft_id, creator_id, current_owner_id, price, status FROM nfts WHERE nft_id = $1', [nftId]);
+    const nftQ = await pool.query('SELECT nft_id, creator_id, current_owner_id, price, buy_now_price, status FROM nfts WHERE nft_id = $1', [nftId]);
     if (nftQ.rowCount === 0) {
       return res.status(404).json({ success: false, message: 'NFT não encontrado' });
     }
@@ -403,22 +403,46 @@ router.patch('/:nftId/price', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Sem permissão para alterar este NFT.' });
     }
 
-    const newPrice = parseFloat(price);
-    if (!Number.isFinite(newPrice) || newPrice < 0) {
-      return res.status(400).json({ success: false, message: 'Preço inválido.' });
+    const updates = [];
+    const values = [];
+    let idx = 1;
+
+    if (price !== undefined) {
+      const newPrice = parseFloat(price);
+      if (!Number.isFinite(newPrice) || newPrice < 0) {
+        return res.status(400).json({ success: false, message: 'Preço base inválido.' });
+      }
+      updates.push(`price = $${idx++}`);
+      values.push(newPrice);
     }
 
-    let newStatus = nft.status;
-    if (status && ['for_sale','listed','draft','none','sold'].includes(status)) {
-      newStatus = status === 'none' ? null : status;
+    if (buy_now_price !== undefined) {
+      const newBuyNow = buy_now_price === null ? null : parseFloat(buy_now_price);
+      if (newBuyNow !== null && (!Number.isFinite(newBuyNow) || newBuyNow <= 0)) {
+        return res.status(400).json({ success: false, message: 'Preço de compra imediata inválido.' });
+      }
+      updates.push(`buy_now_price = $${idx++}`);
+      values.push(newBuyNow);
     }
+
+    if (status && ['for_sale','listed','draft','none','sold'].includes(status)) {
+      const newStatus = status === 'none' ? null : status;
+      updates.push(`status = $${idx++}`);
+      values.push(newStatus);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ success: false, message: 'Nenhum campo para atualizar.' });
+    }
+
+    values.push(nftId);
 
     const upd = await pool.query(
       `UPDATE nfts 
-         SET price = $1, status = COALESCE($2, status)
-       WHERE nft_id = $3
-       RETURNING nft_id, price, status`,
-      [newPrice, newStatus, nftId]
+         SET ${updates.join(', ')}
+       WHERE nft_id = $${idx}
+       RETURNING nft_id, price, buy_now_price, status`,
+      values
     );
 
     res.json({ success: true, nft: upd.rows[0] });
@@ -428,7 +452,394 @@ router.patch('/:nftId/price', async (req, res) => {
   }
 });
 
-// POST /api/nft/:nftId/purchase - Comprar NFT
+// ==================== ROTAS DE OFERTAS ====================
+
+// POST /api/nft/:nftId/offers - Criar oferta para um NFT
+router.post('/:nftId/offers', async (req, res) => {
+  try {
+    const { nftId } = req.params;
+    const { amount, message, expiresInHours } = req.body;
+    const buyerId = getUserIdFromToken(req);
+
+    if (!buyerId) {
+      return res.status(401).json({ success: false, message: 'Não autenticado.' });
+    }
+
+    const amountEth = parseFloat(amount);
+    if (!amountEth || amountEth <= 0) {
+      return res.status(400).json({ success: false, message: 'Valor da oferta inválido.' });
+    }
+
+    // Verifica se NFT existe e está à venda
+    const nftQ = await pool.query(
+      'SELECT nft_id, name, status, current_owner_id, price, buy_now_price FROM nfts WHERE nft_id = $1',
+      [nftId]
+    );
+    if (nftQ.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'NFT não encontrado.' });
+    }
+    const nft = nftQ.rows[0];
+
+    if (!['for_sale', 'listed'].includes(nft.status)) {
+      return res.status(400).json({ success: false, message: 'NFT não está disponível para ofertas.' });
+    }
+
+    if (String(nft.current_owner_id) === String(buyerId)) {
+      return res.status(400).json({ success: false, message: 'Você não pode fazer oferta no seu próprio NFT.' });
+    }
+
+    // Verifica saldo do comprador
+    const walletQ = await pool.query('SELECT balance_eth FROM wallets WHERE user_id = $1', [buyerId]);
+    const balance = walletQ.rowCount > 0 ? parseFloat(walletQ.rows[0].balance_eth) : 0;
+    if (balance < amountEth) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Saldo insuficiente. Você tem ${balance.toFixed(4)} ETH e precisa de ${amountEth.toFixed(4)} ETH.` 
+      });
+    }
+
+    // Calcula expiração (se fornecida)
+    let expiresAt = null;
+    if (expiresInHours && expiresInHours > 0) {
+      expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000);
+    }
+
+    // Cancela ofertas pendentes anteriores deste comprador para este NFT
+    await pool.query(
+      `UPDATE nft_offers SET status = 'cancelled' WHERE nft_id = $1 AND buyer_id = $2 AND status = 'pending'`,
+      [nftId, buyerId]
+    );
+
+    // Cria nova oferta
+    const insertQ = await pool.query(
+      `INSERT INTO nft_offers (nft_id, buyer_id, amount_eth, message, expires_at)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING offer_id, amount_eth, status, created_at`,
+      [nftId, buyerId, amountEth, message || null, expiresAt]
+    );
+
+    res.json({
+      success: true,
+      message: 'Oferta enviada com sucesso!',
+      offer: insertQ.rows[0]
+    });
+
+  } catch (error) {
+    console.error('Erro ao criar oferta:', error);
+    res.status(500).json({ success: false, message: 'Erro ao criar oferta.' });
+  }
+});
+
+// GET /api/nft/:nftId/offers - Listar ofertas de um NFT (públicas ou do dono)
+router.get('/:nftId/offers', async (req, res) => {
+  try {
+    const { nftId } = req.params;
+    const userId = getUserIdFromToken(req);
+
+    // Busca NFT para validar propriedade e status
+    const nftQ = await pool.query('SELECT current_owner_id, status FROM nfts WHERE nft_id = $1', [nftId]);
+    if (nftQ.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'NFT não encontrado.' });
+    }
+    
+    const nft = nftQ.rows[0];
+    const isOwner = userId && String(nft.current_owner_id) === String(userId);
+    
+    // Se NFT já foi vendido (status 'sold'), não retorna ofertas
+    if (nft.status === 'sold') {
+      return res.json({
+        success: true,
+        offers: [],
+        isOwner
+      });
+    }
+
+    // Se for dono, mostra todas pendentes; senão, só as públicas (pending) ou as próprias
+    let query = `
+      SELECT o.*, 
+             u.first_name, u.last_name, u.avatar_url,
+             COALESCE(u.first_name || ' ' || u.last_name, u.cpf) AS buyer_name
+      FROM nft_offers o
+      JOIN users u ON o.buyer_id = u.user_id
+      WHERE o.nft_id = $1
+    `;
+    const params = [nftId];
+
+    if (!isOwner) {
+      if (userId) {
+        query += ` AND (o.status = 'pending' OR o.buyer_id = $2)`;
+        params.push(userId);
+      } else {
+        query += ` AND o.status = 'pending'`;
+      }
+    } else {
+      // Dono vê apenas ofertas pendentes
+      query += ` AND o.status = 'pending'`;
+    }
+
+    query += ` ORDER BY o.created_at DESC`;
+
+    const result = await pool.query(query, params);
+
+    res.json({
+      success: true,
+      offers: result.rows,
+      isOwner
+    });
+
+  } catch (error) {
+    console.error('Erro ao listar ofertas:', error);
+    res.status(500).json({ success: false, message: 'Erro ao listar ofertas.' });
+  }
+});
+
+// PATCH /api/offers/:offerId/accept - Dono aceita oferta
+router.patch('/offers/:offerId/accept', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { offerId } = req.params;
+    const ownerId = getUserIdFromToken(req);
+
+    console.log(`\n🔔 Tentativa de aceitar oferta ${offerId} pelo usuário ${ownerId}`);
+
+    if (!ownerId) {
+      console.log('❌ Usuário não autenticado');
+      return res.status(401).json({ success: false, message: 'Não autenticado.' });
+    }
+
+    await client.query('BEGIN');
+
+    // Busca oferta com lock
+    const offerQ = await client.query(
+      `SELECT o.offer_id, o.buyer_id, o.amount_eth, o.status as offer_status,
+              n.nft_id, n.name, n.current_owner_id, n.status as nft_status
+       FROM nft_offers o
+       JOIN nfts n ON n.nft_id = o.nft_id
+       WHERE o.offer_id = $1
+       FOR UPDATE OF o`,
+      [offerId]
+    );
+
+    if (offerQ.rowCount === 0) {
+      await client.query('ROLLBACK');
+      console.log('❌ Oferta não encontrada');
+      return res.status(404).json({ success: false, message: 'Oferta não encontrada.' });
+    }
+
+    const offer = offerQ.rows[0];
+    console.log('📋 Oferta encontrada:', {
+      offer_id: offer.offer_id,
+      offer_status: offer.offer_status,
+      nft_status: offer.nft_status,
+      current_owner_id: offer.current_owner_id,
+      buyer_id: offer.buyer_id
+    });
+
+    // Valida propriedade
+    if (String(offer.current_owner_id) !== String(ownerId)) {
+      await client.query('ROLLBACK');
+      console.log('❌ Usuário não é o dono do NFT');
+      return res.status(403).json({ success: false, message: 'Apenas o dono pode aceitar ofertas.' });
+    }
+
+    // Valida status da oferta
+    if (offer.offer_status !== 'pending') {
+      await client.query('ROLLBACK');
+      console.log(`❌ Oferta já foi ${offer.offer_status}`);
+      return res.status(400).json({ success: false, message: `Oferta já foi ${offer.offer_status}.` });
+    }
+
+    // Valida NFT disponível
+    if (!['for_sale', 'listed'].includes(offer.nft_status)) {
+      await client.query('ROLLBACK');
+      console.log(`❌ NFT não está à venda (status: ${offer.nft_status})`);
+      return res.status(400).json({ success: false, message: 'NFT não está mais à venda.' });
+    }
+
+    const amount = parseFloat(offer.amount_eth);
+    const buyerId = offer.buyer_id;
+    const sellerId = ownerId;
+
+    // Verifica saldo do comprador
+    const buyerWalletQ = await client.query(
+      'SELECT balance_eth FROM wallets WHERE user_id = $1 FOR UPDATE',
+      [buyerId]
+    );
+    if (buyerWalletQ.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'Comprador sem carteira.' });
+    }
+
+    const buyerBalance = parseFloat(buyerWalletQ.rows[0].balance_eth);
+    if (buyerBalance < amount) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ 
+        success: false, 
+        message: `Comprador não tem saldo suficiente (tem ${buyerBalance.toFixed(4)} ETH).` 
+      });
+    }
+
+    // Transfere ETH
+    await client.query(
+      'UPDATE wallets SET balance_eth = balance_eth - $1 WHERE user_id = $2',
+      [amount, buyerId]
+    );
+
+    await client.query(
+      'INSERT INTO wallets (user_id, balance_eth) VALUES ($1, 0) ON CONFLICT (user_id) DO NOTHING',
+      [sellerId]
+    );
+    await client.query('SELECT 1 FROM wallets WHERE user_id = $1 FOR UPDATE', [sellerId]);
+    await client.query(
+      'UPDATE wallets SET balance_eth = balance_eth + $1 WHERE user_id = $2',
+      [amount, sellerId]
+    );
+
+    // Transfere propriedade do NFT
+    const updateNftResult = await client.query(
+      `UPDATE nfts SET current_owner_id = $1, status = 'sold', price = $2 WHERE nft_id = $3 RETURNING nft_id, current_owner_id, status`,
+      [buyerId, amount, offer.nft_id]
+    );
+    
+    console.log('NFT atualizado:', updateNftResult.rows[0]);
+
+    // Atualiza oferta
+    await client.query(
+      `UPDATE nft_offers SET status = 'accepted', accepted_at = CURRENT_TIMESTAMP WHERE offer_id = $1`,
+      [offerId]
+    );
+
+    // Rejeita outras ofertas pendentes
+    const rejectResult = await client.query(
+      `UPDATE nft_offers SET status = 'rejected' WHERE nft_id = $1 AND status = 'pending' AND offer_id != $2 RETURNING offer_id`,
+      [offer.nft_id, offerId]
+    );
+    
+    console.log(`Ofertas rejeitadas: ${rejectResult.rowCount}`);
+
+    // Registra transação (apenas uma - vendedor recebe de comprador)
+    await client.query(
+      `INSERT INTO transactions (from_user_id, to_user_id, amount_eth, transaction_type, nft_id, description)
+       VALUES ($1, $2, $3, 'nft_sale', $4, $5)`,
+      [sellerId, buyerId, amount, offer.nft_id, `Venda via oferta do NFT "${offer.name}"`]
+    );
+
+    await client.query('COMMIT');
+    
+    console.log(`✅ Oferta ${offerId} aceita com sucesso. NFT ${offer.nft_id} vendido para ${buyerId}`);
+
+    res.json({
+      success: true,
+      message: 'Oferta aceita! NFT vendido com sucesso.',
+      offer: { offer_id: offerId, amount_eth: amount, buyer_id: buyerId },
+      nft: { nft_id: offer.nft_id, new_owner_id: buyerId, status: 'sold' }
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Erro ao aceitar oferta:', error);
+    res.status(500).json({ success: false, message: 'Erro ao aceitar oferta.' });
+  } finally {
+    client.release();
+  }
+});
+
+// PATCH /api/offers/:offerId/reject - Dono rejeita oferta
+router.patch('/offers/:offerId/reject', async (req, res) => {
+  try {
+    const { offerId } = req.params;
+    const ownerId = getUserIdFromToken(req);
+
+    if (!ownerId) {
+      return res.status(401).json({ success: false, message: 'Não autenticado.' });
+    }
+
+    const offerQ = await pool.query(
+      `SELECT o.offer_id, o.status, n.current_owner_id
+       FROM nft_offers o
+       JOIN nfts n ON n.nft_id = o.nft_id
+       WHERE o.offer_id = $1`,
+      [offerId]
+    );
+
+    if (offerQ.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'Oferta não encontrada.' });
+    }
+
+    const offer = offerQ.rows[0];
+
+    if (String(offer.current_owner_id) !== String(ownerId)) {
+      return res.status(403).json({ success: false, message: 'Apenas o dono pode rejeitar ofertas.' });
+    }
+
+    if (offer.status !== 'pending') {
+      return res.status(400).json({ success: false, message: `Oferta já foi ${offer.status}.` });
+    }
+
+    await pool.query(
+      `UPDATE nft_offers SET status = 'rejected', rejected_at = CURRENT_TIMESTAMP WHERE offer_id = $1`,
+      [offerId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Oferta rejeitada.'
+    });
+
+  } catch (error) {
+    console.error('Erro ao rejeitar oferta:', error);
+    res.status(500).json({ success: false, message: 'Erro ao rejeitar oferta.' });
+  }
+});
+
+// DELETE /api/offers/:offerId - Comprador cancela própria oferta
+router.delete('/offers/:offerId', async (req, res) => {
+  try {
+    const { offerId } = req.params;
+    const userId = getUserIdFromToken(req);
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Não autenticado.' });
+    }
+
+    const offerQ = await pool.query(
+      'SELECT offer_id, buyer_id, status FROM nft_offers WHERE offer_id = $1',
+      [offerId]
+    );
+
+    if (offerQ.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'Oferta não encontrada.' });
+    }
+
+    const offer = offerQ.rows[0];
+
+    if (String(offer.buyer_id) !== String(userId)) {
+      return res.status(403).json({ success: false, message: 'Você só pode cancelar suas próprias ofertas.' });
+    }
+
+    if (offer.status !== 'pending') {
+      return res.status(400).json({ success: false, message: `Oferta já foi ${offer.status}.` });
+    }
+
+    await pool.query(
+      `UPDATE nft_offers SET status = 'cancelled' WHERE offer_id = $1`,
+      [offerId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Oferta cancelada.'
+    });
+
+  } catch (error) {
+    console.error('Erro ao cancelar oferta:', error);
+    res.status(500).json({ success: false, message: 'Erro ao cancelar oferta.' });
+  }
+});
+
+// ==================== COMPRA DIRETA (buy_now_price) ====================
+
+// POST /api/nft/:nftId/purchase - Comprar NFT (buy_now_price ou price)
 router.post('/:nftId/purchase', async (req, res) => {
   const client = await pool.connect();
   try {
@@ -443,7 +854,7 @@ router.post('/:nftId/purchase', async (req, res) => {
 
     // 1. Buscar NFT e validar que está à venda (lock para evitar corrida)
     const nftQ = await client.query(
-      'SELECT nft_id, name, price, status, creator_id, current_owner_id FROM nfts WHERE nft_id = $1 FOR UPDATE',
+      'SELECT nft_id, name, price, buy_now_price, status, creator_id, current_owner_id FROM nfts WHERE nft_id = $1 FOR UPDATE',
       [nftId]
     );
     if (nftQ.rowCount === 0) {
@@ -462,10 +873,24 @@ router.post('/:nftId/purchase', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Você já é o proprietário deste NFT' });
     }
 
-    const price = parseFloat(nft.price);
-    if (!price || price <= 0) {
+    // Prioriza buy_now_price se existir, senão usa price
+    const buyNowPrice = parseFloat(nft.buy_now_price);
+    const basePrice = parseFloat(nft.price);
+    
+    let finalPrice;
+    let purchaseType;
+
+    if (buyNowPrice && buyNowPrice > 0) {
+      // Compra imediata disponível
+      finalPrice = buyNowPrice;
+      purchaseType = 'buy_now';
+    } else if (basePrice && basePrice > 0) {
+      // Compra direta pelo preço base (se não houver buy_now)
+      finalPrice = basePrice;
+      purchaseType = 'direct';
+    } else {
       await client.query('ROLLBACK');
-      return res.status(400).json({ success: false, message: 'Preço inválido' });
+      return res.status(400).json({ success: false, message: 'NFT não tem preço de compra direta. Faça uma oferta.' });
     }
 
     // 2. Verificar saldo do comprador (lock na carteira)
@@ -484,11 +909,11 @@ router.post('/:nftId/purchase', async (req, res) => {
     }
 
     const buyerBalance = parseFloat(buyerWalletQ.rows[0].balance_eth);
-    if (buyerBalance < price) {
+    if (buyerBalance < finalPrice) {
       await client.query('ROLLBACK');
       return res.status(400).json({ 
         success: false, 
-        message: `Saldo insuficiente. Você tem ${buyerBalance.toFixed(8)} ETH e precisa de ${price.toFixed(8)} ETH` 
+        message: `Saldo insuficiente. Você tem ${buyerBalance.toFixed(8)} ETH e precisa de ${finalPrice.toFixed(8)} ETH` 
       });
     }
 
@@ -497,7 +922,7 @@ router.post('/:nftId/purchase', async (req, res) => {
     // 3. Transferir ETH: comprador → vendedor
     const debitQ = await client.query(
       'UPDATE wallets SET balance_eth = balance_eth - $1 WHERE user_id = $2 AND balance_eth >= $1 RETURNING balance_eth',
-      [price, buyerId]
+      [finalPrice, buyerId]
     );
     if (debitQ.rowCount === 0) {
       await client.query('ROLLBACK');
@@ -514,7 +939,7 @@ router.post('/:nftId/purchase', async (req, res) => {
 
     await client.query(
       'UPDATE wallets SET balance_eth = balance_eth + $1 WHERE user_id = $2',
-      [price, sellerId]
+      [finalPrice, sellerId]
     );
 
     // 4. Atualizar NFT: transferir propriedade e remover da venda
@@ -522,32 +947,31 @@ router.post('/:nftId/purchase', async (req, res) => {
       `UPDATE nfts 
        SET current_owner_id = $1, status = 'sold', price = $2
        WHERE nft_id = $3`,
-      [buyerId, price, nftId]
+      [buyerId, finalPrice, nftId]
     );
 
-    // 5. Registrar transações
-    await client.query(
-      `INSERT INTO transactions (from_user_id, to_user_id, amount_eth, transaction_type, nft_id, description)
-       VALUES ($1, $2, $3, 'nft_purchase', $4, $5)`,
-      [buyerId, sellerId, price, nftId, `Compra do NFT "${nft.name}"`]
-    );
+    // 5. Registrar transação (apenas uma - vendedor recebe de comprador)
+    const description = purchaseType === 'buy_now' 
+      ? `Compra imediata (Buy Now) do NFT "${nft.name}"`
+      : `Compra direta do NFT "${nft.name}"`;
 
     await client.query(
       `INSERT INTO transactions (from_user_id, to_user_id, amount_eth, transaction_type, nft_id, description)
        VALUES ($1, $2, $3, 'nft_sale', $4, $5)`,
-      [sellerId, buyerId, price, nftId, `Venda do NFT "${nft.name}"`]
+      [sellerId, buyerId, finalPrice, nftId, description]
     );
 
     await client.query('COMMIT');
 
     res.json({ 
       success: true, 
-      message: 'NFT comprado com sucesso!',
+      message: purchaseType === 'buy_now' ? 'Compra imediata realizada!' : 'NFT comprado com sucesso!',
       nft: {
         nft_id: nft.nft_id,
         name: nft.name,
         new_owner_id: buyerId,
-        price: price
+        price: finalPrice,
+        purchase_type: purchaseType
       }
     });
   } catch (error) {
@@ -559,4 +983,174 @@ router.post('/:nftId/purchase', async (req, res) => {
   }
 });
 
+// GET /api/nft/:nftId/history - Histórico de transações de um NFT
+router.get('/:nftId/history', async (req, res) => {
+  try {
+    const { nftId } = req.params;
+
+    const historyQuery = `
+      SELECT 
+        t.transaction_id,
+        t.amount_eth,
+        t.transaction_type,
+        t.description,
+        t.created_at,
+        t.from_user_id,
+        t.to_user_id,
+        from_user.first_name AS from_first_name,
+        from_user.last_name AS from_last_name,
+        from_user.nickname AS from_nickname,
+        from_user.avatar_url AS from_avatar,
+        to_user.first_name AS to_first_name,
+        to_user.last_name AS to_last_name,
+        to_user.nickname AS to_nickname,
+        to_user.avatar_url AS to_avatar
+      FROM transactions t
+      LEFT JOIN users from_user ON t.from_user_id = from_user.user_id
+      LEFT JOIN users to_user ON t.to_user_id = to_user.user_id
+      WHERE t.nft_id = $1
+        AND t.transaction_type = 'nft_sale'
+      ORDER BY t.created_at DESC
+    `;
+
+    const result = await pool.query(historyQuery, [nftId]);
+
+    // Formatar dados
+    const history = result.rows.map(row => ({
+      transaction_id: row.transaction_id,
+      amount_eth: parseFloat(row.amount_eth),
+      transaction_type: row.transaction_type,
+      description: row.description,
+      created_at: row.created_at,
+      from_user: row.from_user_id ? {
+        user_id: row.from_user_id,
+        name: row.from_nickname || `${row.from_first_name} ${row.from_last_name}`,
+        avatar_url: row.from_avatar
+      } : null,
+      to_user: row.to_user_id ? {
+        user_id: row.to_user_id,
+        name: row.to_nickname || `${row.to_first_name} ${row.to_last_name}`,
+        avatar_url: row.to_avatar
+      } : null
+    }));
+
+    res.json({
+      success: true,
+      history,
+      total: history.length
+    });
+
+  } catch (error) {
+    console.error('Erro ao buscar histórico do NFT:', error);
+    res.status(500).json({ success: false, message: 'Erro ao buscar histórico' });
+  }
+});
+
+// GET /api/nft/transactions/all - Histórico completo de transações (para CMS)
+router.get('/transactions/all', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+
+    const historyQuery = `
+      SELECT 
+        t.transaction_id,
+        t.amount_eth,
+        t.transaction_type,
+        t.description,
+        t.created_at,
+        t.from_user_id,
+        t.to_user_id,
+        t.nft_id,
+        n.name AS nft_name,
+        n.image_url AS nft_image,
+        n.price AS nft_original_price,
+        n.creator_id AS nft_creator_id,
+        c.name AS collection_name,
+        creator.first_name AS creator_first_name,
+        creator.last_name AS creator_last_name,
+        creator.nickname AS creator_nickname,
+        creator.avatar_url AS creator_avatar,
+        from_user.first_name AS from_first_name,
+        from_user.last_name AS from_last_name,
+        from_user.nickname AS from_nickname,
+        from_user.avatar_url AS from_avatar,
+        to_user.first_name AS to_first_name,
+        to_user.last_name AS to_last_name,
+        to_user.nickname AS to_nickname,
+        to_user.avatar_url AS to_avatar
+      FROM transactions t
+      LEFT JOIN nfts n ON t.nft_id = n.nft_id
+      LEFT JOIN collections c ON n.collection_id = c.collection_id
+      LEFT JOIN users creator ON n.creator_id = creator.user_id
+      LEFT JOIN users from_user ON t.from_user_id = from_user.user_id
+      LEFT JOIN users to_user ON t.to_user_id = to_user.user_id
+      WHERE t.transaction_type = 'nft_sale'
+      ORDER BY t.created_at DESC
+      LIMIT $1 OFFSET $2
+    `;
+
+    const countQuery = `
+      SELECT COUNT(*)::int AS total
+      FROM transactions
+      WHERE transaction_type = 'nft_sale'
+    `;
+
+    const [result, countResult] = await Promise.all([
+      pool.query(historyQuery, [limit, offset]),
+      pool.query(countQuery)
+    ]);
+
+    const total = countResult.rows[0]?.total || 0;
+
+    // Formatar dados com valorização
+    const history = result.rows.map(row => ({
+      transaction_id: row.transaction_id,
+      amount_eth: parseFloat(row.amount_eth),
+      transaction_type: row.transaction_type,
+      description: row.description,
+      created_at: row.created_at,
+      nft: row.nft_id ? {
+        nft_id: row.nft_id,
+        name: row.nft_name,
+        image_url: row.nft_image,
+        original_price: row.nft_original_price ? parseFloat(row.nft_original_price) : null,
+        collection_name: row.collection_name
+      } : null,
+      creator: row.nft_creator_id ? {
+        user_id: row.nft_creator_id,
+        name: row.creator_nickname || `${row.creator_first_name} ${row.creator_last_name}`,
+        avatar_url: row.creator_avatar
+      } : null,
+      from_user: row.from_user_id ? {
+        user_id: row.from_user_id,
+        name: row.from_nickname || `${row.from_first_name} ${row.from_last_name}`,
+        avatar_url: row.from_avatar
+      } : null,
+      to_user: row.to_user_id ? {
+        user_id: row.to_user_id,
+        name: row.to_nickname || `${row.to_first_name} ${row.to_last_name}`,
+        avatar_url: row.to_avatar
+      } : null
+    }));
+
+    res.json({
+      success: true,
+      transactions: history,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro ao buscar histórico completo:', error);
+    res.status(500).json({ success: false, message: 'Erro ao buscar histórico' });
+  }
+});
+
 module.exports = router;
+

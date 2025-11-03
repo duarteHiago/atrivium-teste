@@ -4,7 +4,6 @@ import styled from 'styled-components';
 import { API_BASE } from '../../config/api';
 import FavoriteButton from '../FavoriteButton/FavoriteButton';
 import NftOffers from '../NftOffers/NftOffers';
-import NftHistory from '../NftHistory/NftHistory';
 
 const Container = styled.div`
   max-width: 1400px;
@@ -516,12 +515,7 @@ const NftDetail = () => {
         const token = localStorage.getItem('token');
         const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
         
-        // Adiciona timestamp para evitar cache
-        const timestamp = new Date().getTime();
-        const response = await fetch(`${API_BASE}/api/leonardo/${id}?_t=${timestamp}`, { 
-          headers,
-          cache: 'no-cache'
-        });
+        const response = await fetch(`${API_BASE}/api/leonardo/${id}`, { headers });
         const data = await response.json();
         
         if (data.success && data.nft) {
@@ -694,6 +688,7 @@ const NftDetail = () => {
   const basePrice = parseFloat(price);
   const displayPrice = buyNowPrice || suggestedPrice || basePrice;
   const hasBuyNow = buyNowPrice && buyNowPrice > 0;
+  const hasBonus = suggestedPrice && suggestedPrice > basePrice;
 
   return (
     <Container>
@@ -774,237 +769,82 @@ const NftDetail = () => {
             </Creator>
           )}
 
-          {/* Seção de Preços e Ofertas Unificada */}
+          {/* Preço e Botões */}
           <PriceSection>
-            <SectionTitle style={{ margin: '0 0 20px 0', fontSize: '1.5rem' }}>
-              💰 Preços e Ofertas
-            </SectionTitle>
-
-            {/* Explicação do Sistema */}
-            {isForSale && (
-              <div style={{ 
-                background: 'rgba(102, 126, 234, 0.1)',
-                border: '1px solid rgba(102, 126, 234, 0.3)',
-                borderRadius: '12px', 
-                padding: '16px', 
-                marginBottom: '20px',
-                fontSize: '0.9rem',
-                color: 'rgba(255, 255, 255, 0.8)',
-                lineHeight: '1.6'
-              }}>
-                <div style={{ fontWeight: 600, marginBottom: '8px', color: '#a8b5ff' }}>
-                  ℹ️ Como funciona:
-                </div>
-                <div style={{ marginBottom: '6px' }}>
-                  • <strong>Preço Base ({basePrice.toFixed(4)} ETH):</strong> Valor mínimo do NFT - Use como referência para fazer ofertas
-                </div>
-                <div style={{ marginBottom: '6px' }}>
-                  • <strong>Fazer Oferta:</strong> Ofereça um valor <u>acima</u> de {basePrice.toFixed(4)} ETH e aguarde aprovação do dono
-                </div>
-                {hasBuyNow && (
-                  <div>
-                    • <strong>Compra Imediata ({buyNowPrice.toFixed(4)} ETH):</strong> Pague este valor e receba o NFT instantaneamente sem concorrência
-                  </div>
-                )}
-              </div>
-            )}
-
-            {!isForSale && !isOwner && (
-              <div style={{ 
-                background: 'rgba(251, 191, 36, 0.1)', 
-                border: '1px solid rgba(251, 191, 36, 0.3)', 
-                borderRadius: '12px', 
-                padding: '16px', 
-                marginBottom: '20px',
-                fontSize: '0.9rem',
-                color: 'rgba(255, 255, 255, 0.8)',
-                lineHeight: '1.6'
-              }}>
-                <div style={{ fontWeight: 600, marginBottom: '8px', color: '#fbbf24' }}>
-                  💡 Este NFT não está listado para venda
-                </div>
-                <div>
-                  Você ainda pode fazer uma oferta ao proprietário e aguardar aprovação.
-                </div>
-              </div>
-            )}
-
-            {/* Grid de Preços */}
-            {isForSale && (
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: hasBuyNow ? '1fr 1fr' : '1fr', 
-                gap: '16px', 
-                marginBottom: '24px' 
-              }}>
-                {/* Preço Base */}
-                <div style={{ 
-                  background: 'rgba(255, 255, 255, 0.05)', 
-                  border: '1px solid rgba(255, 255, 255, 0.1)', 
-                  borderRadius: '12px', 
-                  padding: '20px' 
-                }}>
-                  <div style={{ 
-                    fontSize: '0.85rem', 
-                    color: 'rgba(255, 255, 255, 0.6)', 
-                    marginBottom: '8px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px'
-                  }}>
-                    💎 Preço Base (Ofertas)
-                  </div>
-                  <div style={{ 
-                    fontSize: '1.8rem', 
-                    fontWeight: 700, 
-                    color: '#a8b5ff',
-                    marginBottom: '4px'
-                  }}>
-                    {basePrice.toFixed(4)} ETH
-                  </div>
-                  <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>
-                    ≈ ${(basePrice * 2000).toFixed(2)} USD
-                  </div>
-                </div>
-
-                {/* Preço de Compra Imediata */}
-                {hasBuyNow && (
-                  <div style={{ 
-                    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.15))', 
-                    border: '2px solid rgba(16, 185, 129, 0.4)', 
-                    borderRadius: '12px', 
-                    padding: '20px',
-                    position: 'relative',
-                    overflow: 'hidden'
-                  }}>
-                    <div style={{ 
-                      position: 'absolute',
-                      top: '8px',
-                      right: '8px',
-                      background: 'rgba(16, 185, 129, 0.3)',
-                      color: '#10b981',
-                      padding: '4px 10px',
-                      borderRadius: '12px',
-                      fontSize: '0.75rem',
-                      fontWeight: 700
-                    }}>
-                      ⚡ INSTANTÂNEO
-                    </div>
-                    <div style={{ 
-                      fontSize: '0.85rem', 
-                      color: 'rgba(16, 185, 129, 0.9)', 
-                      marginBottom: '8px',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px'
-                    }}>
-                      🚀 Compra Imediata
-                    </div>
-                    <div style={{ 
-                      fontSize: '1.8rem', 
-                      fontWeight: 700, 
-                      color: '#10b981',
-                      marginBottom: '4px'
-                    }}>
-                      {buyNowPrice.toFixed(4)} ETH
-                    </div>
-                    <div style={{ fontSize: '0.85rem', color: 'rgba(16, 185, 129, 0.8)' }}>
-                      ≈ ${(buyNowPrice * 2000).toFixed(2)} USD
-                    </div>
-                    <div style={{ 
-                      marginTop: '12px', 
-                      fontSize: '0.8rem', 
-                      color: 'rgba(255, 255, 255, 0.7)',
-                      paddingTop: '12px',
-                      borderTop: '1px solid rgba(16, 185, 129, 0.2)'
-                    }}>
-                      +{(((buyNowPrice / basePrice) - 1) * 100).toFixed(0)}% acima do preço base
-                    </div>
-                  </div>
-                )}
+            <PriceLabel>{hasBonus ? 'Valor Sugerido' : 'Preço atual'}</PriceLabel>
+            <PriceValue>
+              {isForSale ? (
+                <>
+                  {displayPrice.toFixed(3)} ETH
+                  <UsdValue>≈ ${(displayPrice * 2000).toFixed(2)}</UsdValue>
+                </>
+              ) : (
+                <span style={{ fontSize: '1.2rem', color: 'rgba(255, 255, 255, 0.5)' }}>
+                  Não disponível para venda
+                </span>
+              )}
+            </PriceValue>
+            {hasBonus && isForSale && (
+              <div style={{ fontSize: '0.85em', color: 'rgba(34, 197, 94, 0.8)', marginTop: '8px' }}>
+                Preço base: {basePrice.toFixed(3)} ETH
+                <span style={{ marginLeft: '8px', color: '#22c55e', fontWeight: 600 }}>
+                  +{(((displayPrice / basePrice) - 1) * 100).toFixed(1)}% por popularidade
+                </span>
               </div>
             )}
 
             {/* Mini gráfico de valorização (14d) */}
             {series.length > 1 && (
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.6)', marginBottom: '8px' }}>
-                  📈 Valorização (últimos 14 dias)
-                </div>
-                <SparklineWrap>
-                  <svg width="160" height="50" viewBox="0 0 160 50">
-                    <path 
-                      d={buildPath(series, 160, 50)} 
-                      fill="none" 
-                      stroke={
-                        growthPercent >= 40 ? '#10b981' :
-                        growthPercent >= 20 ? '#22c55e' :
-                        growthPercent >= 0 ? '#84cc16' :
-                        growthPercent >= -10 ? '#f59e0b' :
-                        '#ef4444'
-                      }
-                      strokeWidth="2" 
-                    />
-                  </svg>
-                  {typeof growthPercent === 'number' && (
-                    <GrowthText $positive={growthPercent >= 0}>
-                      {growthPercent >= 0 ? '+' : ''}{growthPercent.toFixed(1)}%
-                    </GrowthText>
-                  )}
-                </SparklineWrap>
-              </div>
+              <SparklineWrap style={{ marginBottom: 14 }}>
+                <svg width="160" height="50" viewBox="0 0 160 50">
+                  <path 
+                    d={buildPath(series, 160, 50)} 
+                    fill="none" 
+                    stroke={
+                      growthPercent >= 40 ? '#10b981' :    // Verde escuro: crescimento máximo (≥40%)
+                      growthPercent >= 20 ? '#22c55e' :    // Verde: crescimento alto
+                      growthPercent >= 0 ? '#84cc16' :     // Verde claro: crescimento positivo
+                      growthPercent >= -10 ? '#f59e0b' :   // Laranja: queda moderada
+                      '#ef4444'                             // Vermelho: queda acentuada
+                    }
+                    strokeWidth="2" 
+                  />
+                </svg>
+                {typeof growthPercent === 'number' && (
+                  <GrowthText $positive={growthPercent >= 0}>
+                    {growthPercent >= 0 ? '+' : ''}{growthPercent.toFixed(1)}%
+                  </GrowthText>
+                )}
+              </SparklineWrap>
             )}
 
-            {/* Botões de Ação */}
             <ActionButtons>
               {isForSale ? (
                 <>
                   {!isOwner ? (
                     <>
                       {hasBuyNow && (
-                        <BuyButton 
-                          onClick={() => setShowPurchaseModal(true)} 
-                          style={{ 
-                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                            flex: hasBuyNow ? 1 : undefined
-                          }}
-                        >
-                          ⚡ Comprar Agora
+                        <BuyButton onClick={() => setShowPurchaseModal(true)} style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
+                          ⚡ Compra Imediata
                         </BuyButton>
                       )}
-                      <OfferButton style={{ flex: 1 }} onClick={() => {
-                        const offersSection = document.getElementById('offers-section');
-                        if (offersSection) {
-                          offersSection.scrollIntoView({ behavior: 'smooth' });
-                          const makeOfferBtn = offersSection.querySelector('button');
-                          if (makeOfferBtn) {
-                            setTimeout(() => makeOfferBtn.click(), 300);
-                          }
-                        }
-                      }}>
-                        💎 Fazer Oferta
-                      </OfferButton>
+                      {!hasBuyNow && (
+                        <OfferButton style={{ flex: 1 }}>
+                          💎 Fazer Oferta
+                        </OfferButton>
+                      )}
                     </>
                   ) : (
                     <BuyButton disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>
-                      👑 Você é o dono
+                      � Você é o dono
                     </BuyButton>
                   )}
                 </>
               ) : (
                 <>
-                  {!isOwner && (
-                    <OfferButton style={{ flex: 1 }} onClick={() => {
-                      const offersSection = document.getElementById('offers-section');
-                      if (offersSection) {
-                        offersSection.scrollIntoView({ behavior: 'smooth' });
-                        const makeOfferBtn = offersSection.querySelector('button');
-                        if (makeOfferBtn) {
-                          setTimeout(() => makeOfferBtn.click(), 300);
-                        }
-                      }
-                    }}>
-                      💎 Fazer Oferta
-                    </OfferButton>
-                  )}
+                  <OfferButton style={{ flex: 1 }}>
+                    💎 Fazer Oferta
+                  </OfferButton>
                   {isOwner && (
                     <BuyButton style={{ flex: 1 }} onClick={() => setShowListModal(true)}>
                       📈 Listar para venda
@@ -1013,22 +853,7 @@ const NftDetail = () => {
                 </>
               )}
             </ActionButtons>
-
-            {/* Sistema de Ofertas Integrado - só aparece se NFT estiver for_sale ou listed */}
-            {['for_sale', 'listed'].includes(nft.status) && (
-              <div id="offers-section" style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                <NftOffers 
-                  nftId={nft.nft_id} 
-                  isOwner={isOwner}
-                  currentUserId={currentUserId}
-                  basePrice={basePrice}
-                />
-              </div>
-            )}
           </PriceSection>
-
-          {/* Histórico de Transações */}
-          <NftHistory nftId={nft.nft_id} />
 
           {/* Informações Rápidas */}
           <InfoGrid>
@@ -1118,6 +943,15 @@ const NftDetail = () => {
                 </InfoValue>
               </InfoCard>
             </Section>
+          )}
+          
+          {/* Sistema de Ofertas */}
+          {nft.status && ['for_sale', 'listed'].includes(nft.status) && (
+            <NftOffers 
+              nftId={nft.nft_id} 
+              isOwner={isOwner}
+              currentUserId={currentUserId}
+            />
           )}
         </InfoSection>
       </ContentGrid>

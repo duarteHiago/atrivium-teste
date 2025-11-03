@@ -252,11 +252,11 @@ function CollectionBanner() {
           <StatsRow>
             <StatItem>
               <span>Floor Price</span>
-              <strong>{collection.floor_price || '0'} ETH</strong>
+              <strong>{Number.parseFloat(collection.floor_price || 0).toFixed(2)} ETH</strong>
             </StatItem>
             <StatItem>
               <span>Total Volume</span>
-              <strong>{collection.total_volume || '0'} ETH</strong>
+              <strong>{Number.parseFloat(collection.total_volume || 0).toFixed(2)} ETH</strong>
             </StatItem>
             <StatItem>
               <span>Items</span>
@@ -264,7 +264,7 @@ function CollectionBanner() {
             </StatItem>
             <StatItem>
               <span>Listed</span>
-              <strong>2%</strong>
+              <strong>{Number.parseFloat(collection.listed_percent || 0).toFixed(1)}%</strong>
             </StatItem>
           </StatsRow>
         </CollectionInfo>

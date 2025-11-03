@@ -25,6 +25,7 @@ import NftDetail from './Components/NftDetail/NftDetail';
 import FavoriteButton from './Components/FavoriteButton/FavoriteButton';
 import PublicProfile from './Components/User/PublicProfile';
 import { API_BASE } from './config/api';
+import Activity from './Components/Activity/Activity';
 
 // 2. ATUALIZE OS ESTILOS PARA O EFEITO DE BLUR
 // Adiciona 'filter' e 'transition' quando um modal está aberto
@@ -415,6 +416,11 @@ function App() {
             <Route path="/collections" element={
               <ProtectedRoute requireAuth={true} onRequireLogin={() => setIsLoginModalOpen(true)}>
                 <Collections />
+              </ProtectedRoute>
+            } />
+            <Route path="/activity" element={
+              <ProtectedRoute requireAuth={true} onRequireLogin={() => setIsLoginModalOpen(true)}>
+                <Activity />
               </ProtectedRoute>
             } />
             <Route path="/collections/:id" element={<CollectionDetail />} />
