@@ -2,6 +2,7 @@ import React from 'react';
 import styled from 'styled-components';
 import UserManagement from './UserManagement';
 import FeaturedCollections from './FeaturedCollections';
+import WalletManagement from './WalletManagement';
 
 const CmsContainer = styled.div`
   padding: 24px;
@@ -76,6 +77,13 @@ const Cms = ({ onClose }) => {
         <h2 style={{ margin: '10px 0' }}>Banner principal — Coleções em destaque</h2>
         <p style={{ marginTop: 0, opacity: 0.8 }}>Escolha até 4 coleções e defina a ordem para o carrossel da Discover.</p>
         <FeaturedCollections />
+      </div>
+
+      {/* Gerenciamento de Carteiras */}
+      <div style={{ marginTop: 28 }}>
+        <h2 style={{ margin: '10px 0' }}>Carteiras e Fundos</h2>
+        <p style={{ marginTop: 0, opacity: 0.8 }}>Injete ETH nas carteiras dos usuários para simulação de fundos.</p>
+        <WalletManagement />
       </div>
     </CmsContainer>
   );

@@ -276,7 +276,12 @@ function CollectionModal({ isOpen, onClose, onSelect }) {
 
   const fetchCollections = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/collections/list`);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const response = await fetch(`${API_BASE}/api/collections/list?mine=true`, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
       const data = await response.json();
       if (data.success) {
         setCollections(data.collections);
@@ -311,9 +316,11 @@ function CollectionModal({ isOpen, onClose, onSelect }) {
         if (formData.banner_image) fd.append('banner_image', formData.banner_image);
         fd.append('banner', bannerFile);
         body = fd;
-        headers = undefined; // fetch define o boundary
+        headers = {
+          ...(typeof window !== 'undefined' && localStorage.getItem('token') ? { 'Authorization': `Bearer ${localStorage.getItem('token')}` } : {})
+        }; // fetch define o boundary
       } else {
-        headers = { 'Content-Type': 'application/json' };
+        headers = { 'Content-Type': 'application/json', ...(typeof window !== 'undefined' && localStorage.getItem('token') ? { 'Authorization': `Bearer ${localStorage.getItem('token')}` } : {}) };
         body = JSON.stringify(formData);
       }
 

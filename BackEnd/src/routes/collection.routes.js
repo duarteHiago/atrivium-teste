@@ -75,19 +75,30 @@ router.post('/create', upload.single('banner'), async (req, res) => {
       }
     }
 
+    // Gera slug a partir do nome
+    const slug = name.toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
     const insertQuery = `
-      INSERT INTO collections (name, description, banner_image, creator_id)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO collections (name, description, cover_image_url, creator_id, slug)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING *
     `;
 
-    const values = [name, description || null, bannerUrl, creator_id || null];
+    const values = [name, description || null, bannerUrl, creator_id || null, slug];
     const result = await pool.query(insertQuery, values);
+
+    const created = result.rows[0];
+    // Compatibilidade com frontend que espera banner_image
+    created.banner_image = created.cover_image_url;
 
     res.json({
       success: true,
       message: 'Coleção criada com sucesso!',
-      collection: result.rows[0]
+      collection: created
     });
 
   } catch (error) {
@@ -116,6 +127,7 @@ router.get('/list', async (req, res) => {
     let query = `
       SELECT 
         c.*,
+        c.cover_image_url AS banner_image,
         COUNT(n.nft_id) as nfts_count,
         u.cpf as creator_cpf
       FROM collections c
@@ -157,6 +169,7 @@ router.get('/featured', async (req, res) => {
     const collectionQuery = `
       SELECT 
         c.*,
+        c.cover_image_url AS banner_image,
         COUNT(n.nft_id) as nfts_count,
         u.cpf as creator_cpf
       FROM collections c
@@ -211,7 +224,7 @@ router.get('/featured', async (req, res) => {
 router.get('/featured-list', async (req, res) => {
   try {
     const collectionsQuery = `
-      SELECT c.*, COUNT(n.nft_id) as nfts_count, u.cpf as creator_cpf
+      SELECT c.*, c.cover_image_url AS banner_image, COUNT(n.nft_id) as nfts_count, u.cpf as creator_cpf
       FROM collections c
       LEFT JOIN nfts n ON c.collection_id = n.collection_id
       LEFT JOIN users u ON c.creator_id = u.user_id
@@ -277,6 +290,7 @@ router.get('/:collectionId', async (req, res) => {
     const query = `
       SELECT 
         c.*,
+        c.cover_image_url AS banner_image,
         COUNT(n.nft_id) as nfts_count,
         u.cpf as creator_cpf
       FROM collections c
@@ -344,7 +358,7 @@ router.get('/:collectionId/nfts', async (req, res) => {
 router.put('/:collectionId', async (req, res) => {
   try {
     const { collectionId } = req.params;
-    const { name, description, banner_image, is_featured } = req.body;
+    const { name, description, cover_image_url, is_featured } = req.body;
 
     const updates = [];
     const values = [];
@@ -353,14 +367,23 @@ router.put('/:collectionId', async (req, res) => {
     if (name !== undefined) {
       updates.push(`name = $${paramCount++}`);
       values.push(name);
+      
+      // Atualiza o slug se o nome mudou
+      const slug = name.toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      updates.push(`slug = $${paramCount++}`);
+      values.push(slug);
     }
     if (description !== undefined) {
       updates.push(`description = $${paramCount++}`);
       values.push(description);
     }
-    if (banner_image !== undefined) {
-      updates.push(`banner_image = $${paramCount++}`);
-      values.push(banner_image);
+    if (cover_image_url !== undefined) {
+      updates.push(`cover_image_url = $${paramCount++}`);
+      values.push(cover_image_url);
     }
     if (is_featured !== undefined) {
       updates.push(`is_featured = $${paramCount++}`);

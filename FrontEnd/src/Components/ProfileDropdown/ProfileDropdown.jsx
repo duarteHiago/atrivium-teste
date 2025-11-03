@@ -68,8 +68,8 @@ const ProfileDropdown = ({ onLogout, onGoProfile, onGoSettings, onClose }) => {
       <MenuItem href="#">Listings</MenuItem>
       <MenuItem href="#">Portfolio</MenuItem>
       <MenuSeparator />
-  <MenuItem as="button" onClick={onGoSettings} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>Settings</MenuItem>
-      <MenuItem href="#" onClick={onLogout}>
+      <MenuItem as="button" onClick={onGoSettings} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>Settings</MenuItem>
+      <MenuItem as="button" onClick={(e) => { e.preventDefault(); onLogout(); }} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>
         Sair (Logout)
       </MenuItem>
       </DropdownMenu>

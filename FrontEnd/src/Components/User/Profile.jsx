@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 import { API_BASE } from '../../config/api';
-// import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import Modal from '../Modal/Modal';
 import EditProfileModal from './EditProfileModal';
+import FavoriteButton from '../FavoriteButton/FavoriteButton';
 
 const Container = styled.div`
   max-width: 1100px;
@@ -118,16 +119,56 @@ const Message = styled.p`
 const NftGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: 20px;
+  padding-top: 20px; /* Espaço para animação não ser cortada */
   @media (max-width: 900px) { grid-template-columns: repeat(2, 1fr); }
   @media (max-width: 600px) { grid-template-columns: 1fr; }
 `;
 
 const Card = styled.div`
   border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
-  background: rgba(255,255,255,0.03);
+  background: rgba(30, 30, 31, 1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  position: relative;
+  transform-style: preserve-3d;
+  perspective: 1000px;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+      135deg,
+      rgba(102, 126, 234, 0.1) 0%,
+      rgba(118, 75, 162, 0.1) 100%
+    );
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    border-radius: 12px;
+    pointer-events: none;
+  }
+
+  &:hover {
+    transform: translateY(-12px) rotateX(5deg) scale(1.02);
+    box-shadow: 
+      0 20px 40px rgba(0, 0, 0, 0.4),
+      0 0 20px rgba(102, 126, 234, 0.3);
+    border-color: rgba(102, 126, 234, 0.5);
+  }
+
+  &:hover::before {
+    opacity: 1;
+  }
+
+  &:active {
+    transform: translateY(-8px) rotateX(2deg) scale(1.01);
+  }
 `;
 
 const CardImg = styled.img`
@@ -141,8 +182,17 @@ const CardBody = styled.div`
   padding: 10px;
 `;
 
+const CardFooter = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 10px 10px 10px; /* padding-top aumentado para dar respiro da linha */
+  margin-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+`;
+
 export default function Profile({ onRequireLogin }) {
-  // const navigate = useNavigate();
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -250,15 +300,22 @@ export default function Profile({ onRequireLogin }) {
           )}
 
           <Section>
-            <h3>Suas Coleções</h3>
-            {collections.length === 0 ? <p>Nenhuma coleção criada.</p> : (
+            <h3>Coleções</h3>
+            {collections.length === 0 ? <p>Nenhuma coleção criada ainda.</p> : (
               <NftGrid>
                 {collections.map(c => (
-                  <Card key={c.collection_id}>
-                    <CardImg src={c.banner_image} alt={c.name} />
+                  <Card key={c.collection_id} onClick={() => navigate(`/collections/${c.collection_id}`)}>
+                    <CardImg src={c.banner_url || '/default-collection.png'} alt={c.name} />
                     <CardBody>
                       <div style={{fontWeight:600}}>{c.name}</div>
-                      <div style={{opacity:0.8, fontSize:'0.9rem'}}>{c.nfts_count} itens</div>
+                      <div style={{display:'flex', alignItems:'center', gap:'8px', marginTop:'4px'}}>
+                        <span style={{opacity:0.8, fontSize:'0.9rem'}}>{c.nfts_count || 0} NFT(s)</span>
+                        {c.total_favorites > 0 && (
+                          <CollectionFavBadge>
+                            <span>❤️</span> {c.total_favorites}
+                          </CollectionFavBadge>
+                        )}
+                      </div>
                     </CardBody>
                   </Card>
                 ))}
@@ -271,12 +328,26 @@ export default function Profile({ onRequireLogin }) {
             {created.length === 0 ? <p>Nenhum NFT criado ainda.</p> : (
               <NftGrid>
                 {created.map(n => (
-                  <Card key={n.nft_id}>
+                  <Card key={n.nft_id} onClick={() => navigate(`/nft/${n.nft_id}`)}>
                     <CardImg src={n.image_url} alt={n.name || 'NFT'} />
                     <CardBody>
                       <div style={{fontWeight:600}}>{n.name || 'Sem nome'}</div>
                       <div style={{opacity:0.8, fontSize:'0.9rem'}}>{n.description || n.prompt || ''}</div>
                     </CardBody>
+                    <CardFooter>
+                      <div style={{fontSize:'0.85rem', opacity:0.7}}>
+                        {new Date(n.created_at).toLocaleDateString('pt-BR')}
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <FavoriteButton 
+                          nftId={n.nft_id} 
+                          initialCount={n.favorites_count || 0}
+                          initialIsFavorited={n.is_favorited || false}
+                          compact={true}
+                          showCount={true}
+                        />
+                      </div>
+                    </CardFooter>
                   </Card>
                 ))}
               </NftGrid>
@@ -288,12 +359,26 @@ export default function Profile({ onRequireLogin }) {
             {owned.length === 0 ? <p>Nenhum NFT em propriedade.</p> : (
               <NftGrid>
                 {owned.map(n => (
-                  <Card key={n.nft_id}>
+                  <Card key={n.nft_id} onClick={() => navigate(`/nft/${n.nft_id}`)}>
                     <CardImg src={n.image_url} alt={n.name || 'NFT'} />
                     <CardBody>
                       <div style={{fontWeight:600}}>{n.name || 'Sem nome'}</div>
                       <div style={{opacity:0.8, fontSize:'0.9rem'}}>{n.description || n.prompt || ''}</div>
                     </CardBody>
+                    <CardFooter>
+                      <div style={{fontSize:'0.85rem', opacity:0.7}}>
+                        {new Date(n.created_at).toLocaleDateString('pt-BR')}
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <FavoriteButton 
+                          nftId={n.nft_id} 
+                          initialCount={n.favorites_count || 0}
+                          initialIsFavorited={n.is_favorited || false}
+                          compact={true}
+                          showCount={true}
+                        />
+                      </div>
+                    </CardFooter>
                   </Card>
                 ))}
               </NftGrid>
@@ -309,3 +394,20 @@ export default function Profile({ onRequireLogin }) {
   </>
   );
 }
+
+const CollectionFavBadge = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: rgba(255, 75, 100, 0.15);
+  border: 1px solid rgba(255, 75, 100, 0.3);
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #ff4b64;
+  
+  span {
+    font-size: 0.9rem;
+  }
+`;

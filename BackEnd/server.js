@@ -62,6 +62,22 @@ pool.query('SELECT NOW()', (err, res) => {
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS banner_url TEXT;`);
+
+    // Garantir colunas necessárias em collections
+    await pool.query(`ALTER TABLE collections ADD COLUMN IF NOT EXISTS cover_image_url VARCHAR(500);`);
+    await pool.query(`ALTER TABLE collections ADD COLUMN IF NOT EXISTS slug VARCHAR(100);`);
+    await pool.query(`ALTER TABLE collections ADD COLUMN IF NOT EXISTS floor_price DECIMAL(18,8) DEFAULT 0;`);
+    await pool.query(`ALTER TABLE collections ADD COLUMN IF NOT EXISTS total_volume DECIMAL(18,8) DEFAULT 0;`);
+    await pool.query(`ALTER TABLE collections ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE;`);
+
+    // Índices/constraints idempotentes
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_collections_slug ON collections(slug);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_collections_featured ON collections(is_featured);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_collections_creator ON collections(creator_id);`);
+
+    // Relacionamento em nfts para collection (se ainda não existir)
+    await pool.query(`ALTER TABLE nfts ADD COLUMN IF NOT EXISTS collection_id UUID REFERENCES collections(collection_id) ON DELETE SET NULL;`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_nfts_collection ON nfts(collection_id);`);
   } catch (e) {
     console.error('Erro ao ajustar schema de users (role):', e.message);
   }
@@ -163,11 +179,11 @@ app.post('/api/auth/register', async (req, res) => {
     const insertUserQuery = `
       INSERT INTO users (first_name, last_name, cpf, birth_date, email, password_hash, cep, address, gender)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING user_id, email; -- Retorna o ID e email do usuário criado
+      RETURNING user_id, email, first_name, last_name, role; -- Retorna o ID e email do usuário criado
     `;
     const values = [
       firstName, lastName, formattedCPF, birthDate, email,
-      passwordHash, cep, address, gender
+      passwordHash, cep || null, address || null, gender || null
     ];
 
     const newUserResult = await pool.query(insertUserQuery, values);
@@ -324,30 +340,66 @@ app.patch('/api/users/me', authMiddleware, upload.fields([
 app.get('/api/users/me/profile', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.sub;
-    const u = await pool.query(
-      `SELECT user_id, first_name, last_name, email, role, nickname, bio, avatar_url, banner_url
-       FROM users WHERE user_id = $1`, [userId]);
-    if (u.rows.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.' });
 
+    // 1) Tenta buscar usuário com campos estendidos; se falhar por coluna ausente, faz fallback
+    let userRow;
+    try {
+      const u = await pool.query(
+        `SELECT user_id, first_name, last_name, email, role, nickname, bio, avatar_url, banner_url
+         FROM users WHERE user_id = $1`, [userId]);
+      userRow = u.rows[0];
+    } catch (err) {
+      if (err.code === '42703') { // undefined_column
+        const u2 = await pool.query(
+          `SELECT user_id, first_name, last_name, email, role
+           FROM users WHERE user_id = $1`, [userId]);
+        userRow = u2.rows[0];
+      } else {
+        throw err;
+      }
+    }
+    if (!userRow) return res.status(404).json({ message: 'Usuário não encontrado.' });
+
+    // 2) Contagens básicas (tabelas antigas ainda suportam estas colunas)
     const createdCount = await pool.query(`SELECT COUNT(*)::int AS c FROM nfts WHERE creator_id = $1`, [userId]);
     const ownedCount = await pool.query(`SELECT COUNT(*)::int AS c FROM nfts WHERE current_owner_id = $1`, [userId]);
-    const collectionsRes = await pool.query(
-      `SELECT c.collection_id, c.name, c.banner_image, c.created_at, COUNT(n.nft_id)::int AS nfts_count
-       FROM collections c
-       LEFT JOIN nfts n ON n.collection_id = c.collection_id
-       WHERE c.creator_id = $1
-       GROUP BY c.collection_id
-       ORDER BY c.created_at DESC`, [userId]);
 
-    res.json({
-      user: u.rows[0],
+    // 3) Coleções do usuário — tenta com cover_image_url; se falhar, usa fallback sem a coluna
+    let collectionsRows = [];
+    try {
+      const r = await pool.query(
+        `SELECT c.collection_id, c.name, c.cover_image_url AS banner_image, c.created_at, COUNT(n.nft_id)::int AS nfts_count
+         FROM collections c
+         LEFT JOIN nfts n ON n.collection_id = c.collection_id
+         WHERE c.creator_id = $1
+         GROUP BY c.collection_id
+         ORDER BY c.created_at DESC`, [userId]);
+      collectionsRows = r.rows;
+    } catch (err) {
+      if (err.code === '42703' || err.code === '42P01') { // undefined_column ou relation does not exist
+        const r2 = await pool.query(
+          `SELECT c.collection_id, c.name, c.created_at, COUNT(n.nft_id)::int AS nfts_count
+           FROM collections c
+           LEFT JOIN nfts n ON n.collection_id = c.collection_id
+           WHERE c.creator_id = $1
+           GROUP BY c.collection_id
+           ORDER BY c.created_at DESC`, [userId]);
+        // Compat: banner_image ausente
+        collectionsRows = r2.rows.map(row => ({ ...row, banner_image: null }));
+      } else {
+        throw err;
+      }
+    }
+
+    return res.json({
+      user: userRow,
       stats: {
-        created: createdCount.rows[0].c,
-        owned: ownedCount.rows[0].c,
-        collections: collectionsRes.rows.length,
+        created: createdCount.rows[0]?.c ?? 0,
+        owned: ownedCount.rows[0]?.c ?? 0,
+        collections: collectionsRows.length,
         transactions: 0
       },
-      collections: collectionsRes.rows
+      collections: collectionsRows
     });
   } catch (e) {
     console.error('Erro no profile enriquecido:', e);
