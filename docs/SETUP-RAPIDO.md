@@ -71,6 +71,81 @@ Backend: http://localhost:3001
 ### 5. Como Parar o Ambiente
 Para parar e remover todos os contêineres:
 
-```
+```bash
 ./close.sh
 ```
+
+---
+
+## 🎉 Pronto! Seu Ambiente Está Rodando
+
+- **Frontend**: http://localhost:5173
+- **Backend**: http://localhost:3001
+- Clique em **"+ Your NFT"** para criar seu primeiro NFT!
+
+---
+
+## 🧪 Setup Manual (Sem Docker)
+
+Se preferir executar sem Docker:
+
+### Passo 1: Banco de Dados
+
+```bash
+# Executar o script SQL
+psql -U postgres -d atrivium -f DataBase/SQL/01-user.sql
+psql -U postgres -d atrivium -f DataBase/SQL/02-nfts.sql
+psql -U postgres -d atrivium -f DataBase/SQL/03-collections.sql
+```
+
+### Passo 2: Backend
+
+```bash
+cd BackEnd
+
+# Criar arquivo .env
+copy config\environments\.env.example config\environments\.env.development
+
+# Editar .env.development e adicionar:
+# LEONARDO_API_KEY=sua_key_aqui (ou HUGGINGFACE_API_KEY)
+
+# Instalar dependências
+npm install
+
+# Iniciar servidor
+npm run dev
+```
+
+### Passo 3: Frontend
+
+```bash
+cd FrontEnd
+
+# Instalar dependências
+npm install
+
+# Iniciar servidor
+npm run dev
+```
+
+---
+
+## 🔧 Como Funciona
+
+1. **Gerar Preview**: IA cria imagem baseada em descrição
+2. **Criar NFT**: Sistema gera token único (UUID + SHA-256)
+3. **Certificado Digital**: Cada NFT recebe certificado verificável
+4. **Banco de Dados**: Tudo salvo no PostgreSQL
+
+## 🔐 Tokenização Única
+
+✅ Cada imagem = Hash SHA-256 único  
+✅ Impossível duplicar  
+✅ Certificado digital verificável  
+✅ Preparado para blockchain (futuro)
+
+---
+
+## 📚 Mais Informações
+
+Para detalhes técnicos completos, veja: [NFT-SYSTEM-SETUP.md](./NFT-SYSTEM-SETUP.md)

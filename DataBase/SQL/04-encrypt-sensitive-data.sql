@@ -7,6 +7,10 @@ ALTER TABLE users
     ADD COLUMN IF NOT EXISTS encrypted_address bytea,
     ADD COLUMN IF NOT EXISTS encrypted_phone bytea;
 
+-- Remove constraints NOT NULL dos campos que serão criptografados
+ALTER TABLE users ALTER COLUMN cpf DROP NOT NULL;
+ALTER TABLE users ALTER COLUMN address DROP NOT NULL;
+
 -- Função para criptografar dados usando AES-256
 CREATE OR REPLACE FUNCTION encrypt_sensitive_data(data text, key text)
 RETURNS bytea AS $$
@@ -29,35 +33,39 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Trigger para criptografar dados antes de inserir/atualizar
 CREATE OR REPLACE FUNCTION encrypt_sensitive_data_trigger()
 RETURNS TRIGGER AS $$
+DECLARE 
+    encryption_key text;
 BEGIN
-    -- Obtém a chave de criptografia da variável de ambiente (deve ser configurada no banco)
-    DECLARE encryption_key text;
+    -- Usa uma chave fixa para desenvolvimento (DEVE SER ALTERADA EM PRODUÇÃO via configuração)
+    encryption_key := 'dev_encryption_key_32_bytes_change_prod';
+    
+    -- Tenta pegar a chave das configurações customizadas, se não existir usa a padrão
     BEGIN
-        SELECT current_setting('app.encryption_key') INTO encryption_key;
-        
-        -- Criptografa CPF
-        IF NEW.cpf IS NOT NULL THEN
-            NEW.encrypted_cpf = encrypt_sensitive_data(NEW.cpf, encryption_key);
-            NEW.cpf = NULL; -- Remove o CPF em texto plano
+        SELECT current_setting('app.encryption_key', true) INTO encryption_key;
+        IF encryption_key IS NULL OR encryption_key = '' THEN
+            encryption_key := 'dev_encryption_key_32_bytes_change_prod';
         END IF;
-
-        -- Criptografa endereço
-        IF NEW.address IS NOT NULL THEN
-            NEW.encrypted_address = encrypt_sensitive_data(NEW.address, encryption_key);
-            NEW.address = NULL; -- Remove o endereço em texto plano
-        END IF;
-
-        -- Criptografa telefone se existir
-        IF NEW.phone IS NOT NULL THEN
-            NEW.encrypted_phone = encrypt_sensitive_data(NEW.phone, encryption_key);
-            NEW.phone = NULL; -- Remove o telefone em texto plano
-        END IF;
-
-        RETURN NEW;
     EXCEPTION
         WHEN OTHERS THEN
-            RAISE EXCEPTION 'Erro ao criptografar dados sensíveis';
+            encryption_key := 'dev_encryption_key_32_bytes_change_prod';
     END;
+    
+    -- Criptografa CPF
+    IF NEW.cpf IS NOT NULL THEN
+        NEW.encrypted_cpf = encrypt_sensitive_data(NEW.cpf, encryption_key);
+        NEW.cpf = NULL; -- Remove o CPF em texto plano
+    END IF;
+
+    -- Criptografa endereço
+    IF NEW.address IS NOT NULL THEN
+        NEW.encrypted_address = encrypt_sensitive_data(NEW.address, encryption_key);
+        NEW.address = NULL; -- Remove o endereço em texto plano
+    END IF;
+
+    RETURN NEW;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE EXCEPTION 'Erro ao criptografar dados sensíveis: %', SQLERRM;
 END;
 $$ LANGUAGE plpgsql;
 

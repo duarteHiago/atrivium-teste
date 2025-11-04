@@ -18,6 +18,19 @@ const pool = new Pool({
   database: process.env.DB_DATABASE,
 });
 
+// Helper: extrai userId (UUID) do JWT Bearer (se presente)
+function getUserIdFromAuthHeader(req) {
+  try {
+    const auth = req.headers['authorization'] || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    if (!token) return null;
+    const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret-change-me');
+    return payload?.sub || null;
+  } catch {
+    return null;
+  }
+}
+
 // Middleware local para exigir admin neste arquivo de rotas
 async function adminAuth(req, res, next) {
   try {
@@ -41,7 +54,8 @@ async function adminAuth(req, res, next) {
 // --- ENDPOINT 1: Criar nova coleção ---
 router.post('/create', upload.single('banner'), async (req, res) => {
   try {
-    const { name, description, banner_image, creator_id } = req.body;
+  const { name, description, banner_image, creator_id } = req.body;
+  const tokenUserId = getUserIdFromAuthHeader(req);
 
     if (!name) {
       return res.status(400).json({
@@ -50,7 +64,27 @@ router.post('/create', upload.single('banner'), async (req, res) => {
       });
     }
 
-    let bannerUrl = banner_image || null;
+    // Gera slug a partir do nome (obrigatório no schema)
+    const slugify = (s) => String(s)
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+    let baseSlug = slugify(name);
+    if (!baseSlug) baseSlug = uuidv4();
+
+    // Garante unicidade do slug acrescentando sufixo numérico se necessário
+    let slug = baseSlug;
+    let suffix = 1;
+    // Tenta até um limite razoável
+    while (true) {
+      const r = await pool.query('SELECT 1 FROM collections WHERE slug = $1 LIMIT 1', [slug]);
+      if (r.rows.length === 0) break;
+      slug = `${baseSlug}-${suffix++}`;
+    }
+
+    // Compat: frontend envia "banner_image" (URL). No schema, a coluna é cover_image_url
+  let bannerUrl = banner_image || null;
 
     // Se veio arquivo, processa e salva como banner
     if (req.file && req.file.buffer) {
@@ -76,12 +110,12 @@ router.post('/create', upload.single('banner'), async (req, res) => {
     }
 
     const insertQuery = `
-      INSERT INTO collections (name, description, banner_image, creator_id)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO collections (name, description, slug, cover_image_url, creator_id)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING *
     `;
 
-    const values = [name, description || null, bannerUrl, creator_id || null];
+  const values = [name, description || null, slug, bannerUrl, creator_id || tokenUserId || null];
     const result = await pool.query(insertQuery, values);
 
     res.json({
@@ -344,7 +378,7 @@ router.get('/:collectionId/nfts', async (req, res) => {
 router.put('/:collectionId', async (req, res) => {
   try {
     const { collectionId } = req.params;
-    const { name, description, banner_image, is_featured } = req.body;
+  const { name, description, banner_image, is_featured } = req.body;
 
     const updates = [];
     const values = [];
@@ -359,7 +393,8 @@ router.put('/:collectionId', async (req, res) => {
       values.push(description);
     }
     if (banner_image !== undefined) {
-      updates.push(`banner_image = $${paramCount++}`);
+      // Compat: atualizar a coluna correta do schema
+      updates.push(`cover_image_url = $${paramCount++}`);
       values.push(banner_image);
     }
     if (is_featured !== undefined) {

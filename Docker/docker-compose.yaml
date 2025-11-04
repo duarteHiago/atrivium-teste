@@ -27,6 +27,8 @@ services:
       context: ../BackEnd
       dockerfile: ../Docker/BackEnd/Dockerfile
     container_name: atrivium-backend
+    env_file:
+      - ../config/environments/.env.development
     environment:
       - PORT=3001
       - DB_HOST=postgres  # Nome do serviço postgres

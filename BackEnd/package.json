@@ -7,14 +7,16 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "axios": "^1.13.0",
+    "axios": "^1.13.1",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "form-data": "^4.0.4",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "pg": "^8.16.3",
+    "pinata-web3": "^0.5.4",
     "sharp": "^0.34.4",
     "uuid": "^13.0.0"
   },

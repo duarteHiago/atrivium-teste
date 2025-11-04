@@ -341,7 +341,7 @@ function App() {
                       // Mostra os NFTs reais
                       recentNfts.map((nft) => (
                         <NftCard key={nft.nft_id}>
-                          <CardImage src={nft.image_url} alt={nft.name || 'NFT'} />
+                          <DiscoverFallbackImage nft={nft} />
                           <CardInfo>
                             <CardTitle>{nft.name || 'NFT sem nome'}</CardTitle>
                             <CardDescription>
@@ -399,6 +399,51 @@ function App() {
       </PageContainer>
     </>
   )
+}
+
+// --- Utilidades de imagem com fallback (Discover) ---
+function extractCidFromUrl(url) {
+  try {
+    if (!url) return null;
+    if (url.startsWith('ipfs://')) return url.replace('ipfs://', '').split('/')[0];
+    const u = new URL(url, window.location.origin);
+    const parts = u.pathname.split('/').filter(Boolean);
+    const ipfsIdx = parts.indexOf('ipfs');
+    if (ipfsIdx >= 0 && parts.length > ipfsIdx + 1) return parts[ipfsIdx + 1];
+    return null;
+  } catch { return null; }
+}
+
+function discoverCandidateUrls(nft) {
+  const urls = [];
+  const base = import.meta?.env?.VITE_API_BASE || 'http://localhost:3001';
+  const img = nft?.image_url || nft?.imageUrl || '';
+  if (img && img.startsWith('/uploads/')) urls.push(`${base}${img}`);
+  if (img && /^https?:\/\//i.test(img)) urls.push(img);
+  const cid = extractCidFromUrl(img) || nft?.ipfs_hash || nft?.ipfsHash || null;
+  if (cid) {
+    urls.push(
+      `https://gateway.pinata.cloud/ipfs/${cid}`,
+      `https://ipfs.io/ipfs/${cid}`,
+      `https://cloudflare-ipfs.com/ipfs/${cid}`
+    );
+    const custom = import.meta?.env?.VITE_PINATA_SUBDOMAIN;
+    if (custom) urls.push(`https://${custom}/ipfs/${cid}`);
+  }
+  return Array.from(new Set(urls.filter(Boolean)));
+}
+
+function DiscoverFallbackImage({ nft }) {
+  const [idx, setIdx] = useState(0);
+  const candidates = discoverCandidateUrls(nft);
+  const src = candidates[idx] || '';
+  return (
+    <CardImage
+      src={src}
+      alt={nft?.name || 'NFT'}
+      onError={() => setIdx((i) => (i + 1 < candidates.length ? i + 1 : i))}
+    />
+  );
 }
 
 export default App

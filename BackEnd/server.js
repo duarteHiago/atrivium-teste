@@ -1,5 +1,9 @@
 // Carrega variáveis de ambiente do arquivo .env
-require('dotenv').config();
+require('dotenv').config({ 
+  path: process.env.NODE_ENV 
+    ? `../config/environments/.env.${process.env.NODE_ENV}` 
+    : '../config/environments/.env.development' 
+});
 
 const express = require('express');
 const cors = require('cors');
@@ -20,6 +24,7 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 const nftRoutes = require('./src/routes/nft.routes');
 const leonardoRoutes = require('./src/routes/leonardo.routes'); // Rotas da API Leonardo
 const collectionRoutes = require('./src/routes/collection.routes'); // Rotas de Coleções
+const ipfsRoutes = require('./src/routes/ipfs.routes'); // Rotas de IPFS/Pinata
 
 // Middlewares
 app.use(cors()); // Permite requisições do frontend
@@ -32,6 +37,7 @@ app.use('/uploads', express.static('uploads'));
 // Usar rotas
 app.use('/api/leonardo', leonardoRoutes); // Rotas da API Leonardo
 app.use('/api/collections', collectionRoutes); // Rotas de Coleções
+app.use('/api/ipfs', ipfsRoutes); // Rotas de IPFS/Pinata
 
 // Configuração da Conexão com o Banco de Dados (lê do .env)
 const pool = new Pool({
@@ -332,7 +338,7 @@ app.get('/api/users/me/profile', authMiddleware, async (req, res) => {
     const createdCount = await pool.query(`SELECT COUNT(*)::int AS c FROM nfts WHERE creator_id = $1`, [userId]);
     const ownedCount = await pool.query(`SELECT COUNT(*)::int AS c FROM nfts WHERE current_owner_id = $1`, [userId]);
     const collectionsRes = await pool.query(
-      `SELECT c.collection_id, c.name, c.banner_image, c.created_at, COUNT(n.nft_id)::int AS nfts_count
+      `SELECT c.collection_id, c.name, c.cover_image_url, c.created_at, COUNT(n.nft_id)::int AS nfts_count
        FROM collections c
        LEFT JOIN nfts n ON n.collection_id = c.collection_id
        WHERE c.creator_id = $1

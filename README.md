@@ -15,22 +15,25 @@ A arquitetura do projeto foi desenhada utilizando um stack de tecnologias modern
 | Categoria | Tecnologia |
 | :--- | :--- |
 | **Frontend** | React (Vite), JavaScript, HTML5, CSS3, Styled-Components |
-| **Backend (Planejado)** | Node.js (Express/NestJS), TypeScript, API REST |
+| **Backend** | Node.js, Express, API REST |
 | **Banco de Dados** | PostgreSQL |
+| **Armazenamento** | IPFS (Pinata) - Descentralizado |
 | **Infraestrutura** | Docker, Docker Compose |
+| **IA Generativa** | Leonardo AI, HuggingFace |
 | **Blockchain (Planejado)**| Solidity (Smart Contracts), Ethers.js |
-| **Geração de Arte (Planejado)**| Integração com APIs de IA (ex: OpenAI DALL-E) |
-| **Segurança (Planejado)** | Autenticação (JWT), Gerenciamento de Chaves |
+| **Segurança** | Autenticação (JWT), Criptografia (pgcrypto) |
 
 ## 3. Status Atual do Projeto
 
 O projeto está em desenvolvimento ativo e organizado em fases:
 
 -   [x] **Fase 1: Configuração do Ambiente** - Estrutura do monorepo (Frontend, Backend, DataBase, Docker) e setup do container PostgreSQL com Docker Compose.
--   [x] **Fase 2: Frontend (em andamento)** - Construção da interface de usuário base com React (Barra Superior, Barra Lateral, Logo).
--   [ ] **Fase 3: Backend (API)** - Desenvolvimento das entidades, repositórios e endpoints REST com Node.js.
--   [ ] **Fase 4: Integração com IA** - Conexão com API para geração de imagens.
--   [ ] **Fase 5: Integração com Blockchain** - Implementação de smart contracts e minting.
+-   [x] **Fase 2: Frontend** - Interface de usuário completa com React (Autenticação, Galeria de NFTs, Criação de NFTs, Perfil de Usuário, Coleções).
+-   [x] **Fase 3: Backend (API)** - Endpoints REST implementados (Autenticação, NFTs, Coleções, Usuários).
+-   [x] **Fase 4: Integração com IA** - Sistema de geração de imagens com Leonardo AI e HuggingFace.
+-   [x] **Fase 5: Tokenização** - Sistema de tokenização única com hash SHA-256 e certificados digitais.
+-   [x] **Fase 6: Armazenamento IPFS** - Integração com Pinata para armazenamento descentralizado de imagens NFT.
+-   [ ] **Fase 7: Integração com Blockchain** - Implementação de smart contracts e minting (Planejado).
 
 ## 4. Arquitetura Planejada
 
@@ -72,18 +75,56 @@ Para configurar e executar este projeto, você precisará ter as seguintes ferra
 
 ## 6. Como Executar (Ambiente de Dev)
 
-Siga os passos para iniciar o ambiente de desenvolvimento local.
+### 🚀 Início Rápido (Recomendado)
 
-### 1. Clonar o Repositório
-
-No local que ficará os arquivos, clica com o botão direito do mouse e abre o terminar e cola o comando a baixo.
+A maneira mais rápida de começar é usar nosso script de automação:
 
 ```bash
-git clone [https://github.com/duarteHiago/atrivium-teste.git](https://github.com/duarteHiago/atrivium-teste.git)
+# 1. Clone o repositório
+git clone https://github.com/duarteHiago/atrivium-teste.git
+cd atrivium-teste
+
+# 2. Configure o ambiente (primeira vez)
+# Copie o arquivo de exemplo
+cd config/environments
+cp .env.example .env.development
+
+# Edite .env.development e adicione suas API keys:
+# LEONARDO_API_KEY=sua_chave_aqui
+# ou HUGGINGFACE_API_KEY=sua_chave_aqui
+
+# 3. Volte para a raiz e inicie tudo
+cd ../..
+chmod +x start.sh   # Apenas Linux/Mac
+./start.sh          # Inicia Docker + Database + Backend + Frontend
+```
+
+**URLs Disponíveis:**
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:3001
+- PostgreSQL: localhost:5433
+
+**Para parar:**
+```bash
+./close.sh
+```
+
+📖 **Para mais detalhes, veja:** [docs/SETUP-RAPIDO.md](docs/SETUP-RAPIDO.md)
+
+---
+
+### 🔧 Setup Manual (Alternativo)
+
+Siga os passos para iniciar o ambiente de desenvolvimento local manualmente.
+
+#### 1. Clonar o Repositório
+
+```bash
+git clone https://github.com/duarteHiago/atrivium-teste.git
 cd atrivium-teste
 ```
 
-### 2. Iniciar o Banco de Dados (PostgreSQL)
+#### 2. Iniciar o Banco de Dados (PostgreSQL)
 
 O container Docker do banco é gerenciado pela pasta Docker.
 
@@ -97,11 +138,32 @@ docker-compose up -d
 	* Porta: 5433
 	* Usuário: admin
 	* Senha: devpassword
-	* Database: atrivium (ou o nome que definiu no seu .yaml)
+	* Database: atrivium-database
 
-### 3. Iniciar o Frontend (React)
+#### 3. Configurar Variáveis de Ambiente
 
-Em um novo terminal, navegue até a pasta FrontEnd.
+```bash
+# Copie o arquivo de exemplo
+cd ../config/environments
+cp .env.example .env.development
+
+# Edite .env.development com suas credenciais
+# Especialmente: LEONARDO_API_KEY ou HUGGINGFACE_API_KEY
+```
+
+#### 4. Iniciar o Backend (Node.js)
+
+```bash
+cd ../../BackEnd
+npm install
+npm run dev
+```
+
+Backend disponível em: http://localhost:3001
+
+#### 5. Iniciar o Frontend (React)
+
+Em um novo terminal:
 
 ```bash
 cd FrontEnd
@@ -109,29 +171,39 @@ npm install
 npm run dev
 ```
 
-* Abra o endereço exibido (padrão: http://localhost:5173).
-
-### 4. Iniciar o Backend (Node.js)
-
-Em um novo terminal, navegue até a pasta FrontEnd.
-
-```bash
-cd BackEnd
-npm install
-npm run dev
-```
+Frontend disponível em: http://localhost:5173
 
 ## 7. Estrutura de Pastas (Monorepo)
 
-O projeto está organizado em uma estrutura de monorepo para separar as responsabilidades:
-
-* `/BackEnd/`: Conterá toda a lógica da API (Node.js).
-* `/DataBase/`: Pode conter scripts `.sql` de migração, diagramas ER, etc.
-* `/Docker/`: Contém os arquivos `docker-compose.yaml` para serviços de infraestrutura (ex: Postgres).
-* `/FrontEnd/`: Contém o projeto React (Vite).
-    * `src/`: Código-fonte do React.
-    * `public/`: Assets públicos.
-    * `package.json`: Scripts e dependências do front-end.
+```
+atrivium-teste/
+├── BackEnd/               # API Node.js + Express
+│   ├── src/
+│   │   ├── controllers/   # Lógica de negócio
+│   │   ├── routes/        # Definição de rotas
+│   │   ├── services/      # Serviços (IA, Criptografia, Tokenização)
+│   │   └── middleware/    # Upload, Autenticação
+│   ├── uploads/           # Armazenamento de imagens
+│   └── server.js          # Entry point
+├── FrontEnd/              # React + Vite
+│   ├── src/
+│   │   ├── Components/    # Componentes React
+│   │   ├── assets/        # Imagens e recursos
+│   │   └── config/        # Configurações
+│   └── index.html
+├── DataBase/              # Scripts SQL
+│   └── SQL/               # Migrações e schemas
+├── Docker/                # Configurações Docker
+│   ├── docker-compose.yaml
+│   ├── BackEnd/           # Dockerfile do backend
+│   └── FrontEnd/          # Dockerfile do frontend
+├── config/                # Configurações do projeto
+│   └── environments/      # Arquivos .env por ambiente
+└── docs/                  # Documentação
+    ├── SETUP-RAPIDO.md    # Guia de início rápido
+    ├── NFT-SYSTEM-SETUP.md
+    └── archived/          # Documentação histórica
+```
 
 ## 8. Troubleshooting (Solução de Problemas)
 

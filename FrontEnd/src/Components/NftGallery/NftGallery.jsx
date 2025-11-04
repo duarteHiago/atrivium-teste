@@ -264,8 +264,8 @@ function NftGallery() {
       const url = `http://localhost:3001/api/leonardo/list?userId=${userId}`;
       console.log('📡 Fazendo requisição para:', url);
       
-      const response = await fetch(url);
-      const data = await response.json();
+      let response = await fetch(url);
+      let data = await response.json();
 
       console.log('📦 Dados recebidos:', data);
 
@@ -273,7 +273,15 @@ function NftGallery() {
         throw new Error(data.message || 'Erro ao carregar NFTs');
       }
 
-      setNfts(data.nfts);
+      // Se não há NFTs do usuário, mostra todos como fallback (melhor UX)
+      if ((data.nfts || []).length === 0) {
+        console.log('⚠️ Nenhum NFT do usuário. Buscando todos para exibir...');
+        response = await fetch('http://localhost:3001/api/leonardo/list');
+        data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Erro ao carregar NFTs');
+      }
+
+      setNfts(data.nfts || []);
     } catch (err) {
       console.error('❌ Erro ao buscar NFTs:', err);
       setError(err.message);
@@ -349,7 +357,7 @@ function NftGallery() {
       <Grid>
         {nfts.map((nft) => (
           <NftCard key={nft.nft_id}>
-            <NftImage src={nft.image_url} alt={nft.name} />
+            <FallbackImage nft={nft} />
             {nft.collection_id ? (
               <>
                 <CollectionTagButton
@@ -469,3 +477,76 @@ function NftGallery() {
 }
 
 export default NftGallery;
+
+// --- Utilidades de imagem com fallback de gateways ---
+function extractCidFromUrl(url) {
+  try {
+    if (!url) return null;
+    // ipfs://CID
+    if (url.startsWith('ipfs://')) {
+      return url.replace('ipfs://', '').split('/')[0];
+    }
+    const u = new URL(url, window.location.origin);
+    // Formatos comuns: https://gateway.pinata.cloud/ipfs/CID[/path]
+    const parts = u.pathname.split('/').filter(Boolean);
+    const ipfsIdx = parts.indexOf('ipfs');
+    if (ipfsIdx >= 0 && parts.length > ipfsIdx + 1) {
+      return parts[ipfsIdx + 1];
+    }
+    // custom gateways podem usar /ipfs/ também; acima cobre.
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function buildCandidateUrls(nft) {
+  const urls = [];
+  const base = import.meta?.env?.VITE_API_BASE || 'http://localhost:3001';
+  const img = nft?.image_url || nft?.imageUrl || '';
+
+  // Se for caminho local
+  if (img && img.startsWith('/uploads/')) {
+    urls.push(`${base}${img}`);
+  }
+
+  // Se já for uma URL absoluta, tenta como primeira opção
+  if (img && /^https?:\/\//i.test(img)) {
+    urls.push(img);
+  }
+
+  // Se conseguirmos extrair o CID, gera gateways alternativos
+  const cid = extractCidFromUrl(img) || nft?.ipfs_hash || nft?.ipfsHash || null;
+  if (cid) {
+    urls.push(
+      `https://gateway.pinata.cloud/ipfs/${cid}`,
+      `https://ipfs.io/ipfs/${cid}`,
+      `https://cloudflare-ipfs.com/ipfs/${cid}`
+    );
+    // Se o usuário tiver um subdomínio mypinata.cloud, podemos tentar também
+    const custom = import.meta?.env?.VITE_PINATA_SUBDOMAIN; // ex: sapphire-added-...mypinata.cloud
+    if (custom) {
+      urls.push(`https://${custom}/ipfs/${cid}`);
+    }
+  }
+
+  // Remove duplicados preservando ordem
+  return Array.from(new Set(urls.filter(Boolean)));
+}
+
+function FallbackImage({ nft }) {
+  const candidates = buildCandidateUrls(nft);
+  const [idx, setIdx] = useState(0);
+  const src = candidates[idx] || '';
+
+  return (
+    <NftImage
+      src={src}
+      alt={nft?.name || 'NFT'}
+      onError={() => {
+        // Avança para o próximo candidato se houver erro
+        setIdx((i) => (i + 1 < candidates.length ? i + 1 : i));
+      }}
+    />
+  );
+}
