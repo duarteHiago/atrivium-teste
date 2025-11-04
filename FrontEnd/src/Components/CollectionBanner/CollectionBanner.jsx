@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import styled from 'styled-components';
+import { API_BASE } from '../../config/api';
 
 const BannerContainer = styled.div`
   position: relative;
@@ -189,7 +190,7 @@ function CollectionBanner() {
   useEffect(() => {
     const fetchFeaturedCollection = async () => {
       try {
-        const response = await fetch('http://localhost:3001/api/collections/featured');
+  const response = await fetch(`${API_BASE}/api/collections/featured`);
         const data = await response.json();
 
         if (data.success) {
@@ -239,7 +240,7 @@ function CollectionBanner() {
         <CollectionInfo>
           <CreatorBadge>
             <span>✓</span>
-            <strong>{collection.creator_cpf ? `By ${collection.creator_cpf}` : 'Artrivium Collection'}</strong>
+            <strong>{collection.creator_name ? `By ${collection.creator_name}` : (collection.creator_cpf ? `By ${collection.creator_cpf}` : 'Artrivium Collection')}</strong>
           </CreatorBadge>
 
           <CollectionTitle>{collection.name}</CollectionTitle>
@@ -251,11 +252,11 @@ function CollectionBanner() {
           <StatsRow>
             <StatItem>
               <span>Floor Price</span>
-              <strong>{collection.floor_price || '0'} ETH</strong>
+              <strong>{Number.parseFloat(collection.floor_price || 0).toFixed(2)} ETH</strong>
             </StatItem>
             <StatItem>
               <span>Total Volume</span>
-              <strong>{collection.total_volume || '0'} ETH</strong>
+              <strong>{Number.parseFloat(collection.total_volume || 0).toFixed(2)} ETH</strong>
             </StatItem>
             <StatItem>
               <span>Items</span>
@@ -263,7 +264,7 @@ function CollectionBanner() {
             </StatItem>
             <StatItem>
               <span>Listed</span>
-              <strong>2%</strong>
+              <strong>{Number.parseFloat(collection.listed_percent || 0).toFixed(1)}%</strong>
             </StatItem>
           </StatsRow>
         </CollectionInfo>

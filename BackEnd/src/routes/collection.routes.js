@@ -18,7 +18,7 @@ const pool = new Pool({
   database: process.env.DB_DATABASE,
 });
 
-// Helper: extrai userId (UUID) do JWT Bearer (se presente)
+// Helper: extrai userId do token (se presente), sem exigir admin
 function getUserIdFromAuthHeader(req) {
   try {
     const auth = req.headers['authorization'] || '';
@@ -26,7 +26,7 @@ function getUserIdFromAuthHeader(req) {
     if (!token) return null;
     const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret-change-me');
     return payload?.sub || null;
-  } catch {
+  } catch (e) {
     return null;
   }
 }
@@ -54,8 +54,12 @@ async function adminAuth(req, res, next) {
 // --- ENDPOINT 1: Criar nova coleção ---
 router.post('/create', upload.single('banner'), async (req, res) => {
   try {
-  const { name, description, banner_image, creator_id } = req.body;
-  const tokenUserId = getUserIdFromAuthHeader(req);
+    const { name, description, banner_image } = req.body;
+    const userId = getUserIdFromAuthHeader(req);
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Não autenticado.' });
+    }
 
     if (!name) {
       return res.status(400).json({
@@ -64,27 +68,7 @@ router.post('/create', upload.single('banner'), async (req, res) => {
       });
     }
 
-    // Gera slug a partir do nome (obrigatório no schema)
-    const slugify = (s) => String(s)
-      .toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)+/g, '');
-    let baseSlug = slugify(name);
-    if (!baseSlug) baseSlug = uuidv4();
-
-    // Garante unicidade do slug acrescentando sufixo numérico se necessário
-    let slug = baseSlug;
-    let suffix = 1;
-    // Tenta até um limite razoável
-    while (true) {
-      const r = await pool.query('SELECT 1 FROM collections WHERE slug = $1 LIMIT 1', [slug]);
-      if (r.rows.length === 0) break;
-      slug = `${baseSlug}-${suffix++}`;
-    }
-
-    // Compat: frontend envia "banner_image" (URL). No schema, a coluna é cover_image_url
-  let bannerUrl = banner_image || null;
+    let bannerUrl = banner_image || null;
 
     // Se veio arquivo, processa e salva como banner
     if (req.file && req.file.buffer) {
@@ -109,19 +93,30 @@ router.post('/create', upload.single('banner'), async (req, res) => {
       }
     }
 
+    // Gera slug a partir do nome
+    const slug = name.toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
     const insertQuery = `
-      INSERT INTO collections (name, description, slug, cover_image_url, creator_id)
+      INSERT INTO collections (name, description, cover_image_url, creator_id, slug)
       VALUES ($1, $2, $3, $4, $5)
       RETURNING *
     `;
 
-  const values = [name, description || null, slug, bannerUrl, creator_id || tokenUserId || null];
+  const values = [name, description || null, bannerUrl, userId, slug];
     const result = await pool.query(insertQuery, values);
+
+    const created = result.rows[0];
+    // Compatibilidade com frontend que espera banner_image
+    created.banner_image = created.cover_image_url;
 
     res.json({
       success: true,
       message: 'Coleção criada com sucesso!',
-      collection: result.rows[0]
+      collection: created
     });
 
   } catch (error) {
@@ -145,33 +140,88 @@ router.post('/create', upload.single('banner'), async (req, res) => {
 // --- ENDPOINT 2: Listar todas as coleções ---
 router.get('/list', async (req, res) => {
   try {
-    const { featured } = req.query;
+    const { featured, mine } = req.query;
+    const userId = getUserIdFromAuthHeader(req);
 
     let query = `
       SELECT 
         c.*,
-        COUNT(n.nft_id) as nfts_count,
-        u.cpf as creator_cpf
+        c.cover_image_url AS banner_image,
+        u.first_name, u.last_name,
+        (COALESCE(u.first_name,'') || CASE WHEN u.last_name IS NOT NULL THEN ' ' || u.last_name ELSE '' END) AS creator_name,
+        COUNT(DISTINCT n.nft_id) as nfts_count,
+        u.cpf as creator_cpf,
+        COALESCE(SUM(fav_counts.total), 0)::int AS total_favorites,
+        -- Métricas dinâmicas por coleção
+        (
+          SELECT MIN(n2.price)::float
+          FROM nfts n2
+          WHERE n2.collection_id = c.collection_id
+            AND n2.price IS NOT NULL AND n2.price > 0
+            AND n2.status IN ('listed','for_sale')
+        ) AS floor_price_calc,
+        (
+          SELECT COALESCE(SUM(t.amount_eth), 0)::float
+          FROM transactions t
+          JOIN nfts n3 ON n3.nft_id = t.nft_id
+          WHERE n3.collection_id = c.collection_id
+            AND t.transaction_type IN ('nft_sale')
+        ) AS total_volume_calc,
+        (
+          SELECT COUNT(*)::int
+          FROM nfts n4
+          WHERE n4.collection_id = c.collection_id
+            AND n4.status IN ('listed','for_sale')
+        ) AS listed_count,
+        CASE WHEN COUNT(DISTINCT n.nft_id) = 0 THEN 0
+             ELSE ROUND((
+               (
+                 SELECT COUNT(*)
+                 FROM nfts n5
+                 WHERE n5.collection_id = c.collection_id
+                   AND n5.status IN ('listed','for_sale')
+               )::numeric * 100
+             ) / COUNT(DISTINCT n.nft_id), 2)::float
+        END AS listed_percent
       FROM collections c
       LEFT JOIN nfts n ON c.collection_id = n.collection_id
       LEFT JOIN users u ON c.creator_id = u.user_id
+      LEFT JOIN (
+        SELECT nft_id, COUNT(*)::int AS total 
+        FROM nft_favorites 
+        GROUP BY nft_id
+      ) fav_counts ON fav_counts.nft_id = n.nft_id
     `;
 
-    if (featured === 'true') {
-      query += ` WHERE c.is_featured = TRUE`;
+    const conditions = [];
+    const params = [];
+    if (featured === 'true') conditions.push(`c.is_featured = TRUE`);
+    if (mine === 'true') {
+      if (!userId) return res.status(401).json({ success: false, message: 'Não autenticado.' });
+      conditions.push(`c.creator_id = $${params.push(userId)}`);
+    }
+    if (conditions.length) {
+      query += ` WHERE ` + conditions.join(' AND ');
     }
 
     query += `
-      GROUP BY c.collection_id, u.cpf
+      GROUP BY c.collection_id, u.cpf, u.first_name, u.last_name
       ORDER BY c.created_at DESC
     `;
 
-    const result = await pool.query(query);
+    const result = await pool.query(query, params);
+
+    // Normaliza métricas calculadas sobrescrevendo valores antigos se necessário
+    const rows = result.rows.map(r => ({
+      ...r,
+      floor_price: r.floor_price_calc != null ? r.floor_price_calc : r.floor_price,
+      total_volume: r.total_volume_calc != null ? r.total_volume_calc : r.total_volume
+    }));
 
     res.json({
       success: true,
-      collections: result.rows,
-      total: result.rows.length
+      collections: rows,
+      total: rows.length
     });
 
   } catch (error) {
@@ -191,18 +241,43 @@ router.get('/featured', async (req, res) => {
     const collectionQuery = `
       SELECT 
         c.*,
-        COUNT(n.nft_id) as nfts_count,
-        u.cpf as creator_cpf
+        c.cover_image_url AS banner_image,
+        u.first_name, u.last_name,
+        (COALESCE(u.first_name,'') || CASE WHEN u.last_name IS NOT NULL THEN ' ' || u.last_name ELSE '' END) AS creator_name,
+        COUNT(DISTINCT n.nft_id) as nfts_count,
+        u.cpf as creator_cpf,
+        (
+          SELECT MIN(n2.price)::float FROM nfts n2
+          WHERE n2.collection_id = c.collection_id AND n2.price IS NOT NULL AND n2.price > 0
+            AND n2.status IN ('listed','for_sale')
+        ) AS floor_price_calc,
+        (
+          SELECT COALESCE(SUM(t.amount_eth), 0)::float
+          FROM transactions t JOIN nfts n3 ON n3.nft_id = t.nft_id
+          WHERE n3.collection_id = c.collection_id AND t.transaction_type IN ('nft_sale')
+        ) AS total_volume_calc,
+        (
+          SELECT COUNT(*)::int FROM nfts n4
+          WHERE n4.collection_id = c.collection_id AND n4.status IN ('listed','for_sale')
+        ) AS listed_count,
+        CASE WHEN COUNT(DISTINCT n.nft_id) = 0 THEN 0
+             ELSE ROUND((
+               (
+                 SELECT COUNT(*) FROM nfts n5
+                 WHERE n5.collection_id = c.collection_id AND n5.status IN ('listed','for_sale')
+               )::numeric * 100
+             ) / COUNT(DISTINCT n.nft_id), 2)::float
+        END AS listed_percent
       FROM collections c
       LEFT JOIN nfts n ON c.collection_id = n.collection_id
       LEFT JOIN users u ON c.creator_id = u.user_id
       WHERE c.is_featured = TRUE
-      GROUP BY c.collection_id, u.cpf
+      GROUP BY c.collection_id, u.cpf, u.first_name, u.last_name
       ORDER BY c.created_at DESC
       LIMIT 1
     `;
 
-    const collectionResult = await pool.query(collectionQuery);
+  const collectionResult = await pool.query(collectionQuery);
 
     if (collectionResult.rows.length === 0) {
       return res.json({
@@ -212,7 +287,12 @@ router.get('/featured', async (req, res) => {
       });
     }
 
-    const collection = collectionResult.rows[0];
+    const collectionRaw = collectionResult.rows[0];
+    const collection = {
+      ...collectionRaw,
+      floor_price: collectionRaw.floor_price_calc != null ? collectionRaw.floor_price_calc : collectionRaw.floor_price,
+      total_volume: collectionRaw.total_volume_calc != null ? collectionRaw.total_volume_calc : collectionRaw.total_volume,
+    };
 
     // Busca os NFTs dessa coleção (limite de 4 para preview)
     const nftsQuery = `
@@ -245,17 +325,53 @@ router.get('/featured', async (req, res) => {
 router.get('/featured-list', async (req, res) => {
   try {
     const collectionsQuery = `
-      SELECT c.*, COUNT(n.nft_id) as nfts_count, u.cpf as creator_cpf
+      SELECT c.*, c.cover_image_url AS banner_image,
+             u.first_name, u.last_name,
+             (COALESCE(u.first_name,'') || CASE WHEN u.last_name IS NOT NULL THEN ' ' || u.last_name ELSE '' END) AS creator_name,
+             COUNT(DISTINCT n.nft_id) as nfts_count, 
+             u.cpf as creator_cpf,
+             COALESCE(SUM(fav_counts.total), 0)::int AS total_favorites,
+             (
+               SELECT MIN(n2.price)::float FROM nfts n2
+               WHERE n2.collection_id = c.collection_id AND n2.price IS NOT NULL AND n2.price > 0
+                 AND n2.status IN ('listed','for_sale')
+             ) AS floor_price_calc,
+             (
+               SELECT COALESCE(SUM(t.amount_eth), 0)::float
+               FROM transactions t JOIN nfts n3 ON n3.nft_id = t.nft_id
+               WHERE n3.collection_id = c.collection_id AND t.transaction_type IN ('nft_sale')
+             ) AS total_volume_calc,
+             (
+               SELECT COUNT(*)::int FROM nfts n4
+               WHERE n4.collection_id = c.collection_id AND n4.status IN ('listed','for_sale')
+             ) AS listed_count,
+             CASE WHEN COUNT(DISTINCT n.nft_id) = 0 THEN 0
+                  ELSE ROUND((
+                    (
+                      SELECT COUNT(*) FROM nfts n5
+                      WHERE n5.collection_id = c.collection_id AND n5.status IN ('listed','for_sale')
+                    )::numeric * 100
+                  ) / COUNT(DISTINCT n.nft_id), 2)::float
+             END AS listed_percent
       FROM collections c
       LEFT JOIN nfts n ON c.collection_id = n.collection_id
       LEFT JOIN users u ON c.creator_id = u.user_id
+      LEFT JOIN (
+        SELECT nft_id, COUNT(*)::int AS total 
+        FROM nft_favorites 
+        GROUP BY nft_id
+      ) fav_counts ON fav_counts.nft_id = n.nft_id
       WHERE c.is_featured = TRUE
-      GROUP BY c.collection_id, u.cpf
+      GROUP BY c.collection_id, u.cpf, u.first_name, u.last_name
       ORDER BY c.featured_order NULLS LAST, c.updated_at DESC
       LIMIT 4
     `;
     const collectionsRes = await pool.query(collectionsQuery);
-    const collections = collectionsRes.rows;
+    const collections = collectionsRes.rows.map(r => ({
+      ...r,
+      floor_price: r.floor_price_calc != null ? r.floor_price_calc : r.floor_price,
+      total_volume: r.total_volume_calc != null ? r.total_volume_calc : r.total_volume,
+    }));
 
     // Busca previews (até 3) para cada coleção — aleatórios
     const previewsByCollection = {};
@@ -267,7 +383,36 @@ router.get('/featured-list', async (req, res) => {
       previewsByCollection[col.collection_id] = r.rows;
     }
 
-    res.json({ success: true, collections, previews: previewsByCollection });
+    // Monta sparkline de crescimento por coleção (últimos 14 dias, acumulado)
+    const sparkByCollection = {};
+    const growthByCollection = {};
+    for (const col of collections) {
+      const q = `
+        WITH days AS (
+          SELECT generate_series((CURRENT_DATE - INTERVAL '13 day')::date, CURRENT_DATE::date, INTERVAL '1 day')::date AS d
+        ), favs AS (
+          SELECT date_trunc('day', f.created_at)::date AS d, COUNT(*)::int AS c
+          FROM nft_favorites f
+          INNER JOIN nfts n ON n.nft_id = f.nft_id
+          WHERE n.collection_id = $1 AND f.created_at >= (CURRENT_DATE - INTERVAL '13 day')
+          GROUP BY 1
+        )
+        SELECT d.d AS day, COALESCE(f.c, 0)::int AS count
+        FROM days d
+        LEFT JOIN favs f ON f.d = d.d
+        ORDER BY d.d
+      `;
+      const r = await pool.query(q, [col.collection_id]);
+      let acc = 0;
+      const series = r.rows.map(row => { acc += row.count; return acc; });
+      sparkByCollection[col.collection_id] = series;
+      const first = series[0] || 0;
+      const last = series[series.length - 1] || 0;
+      const base = Math.max(first, 1);
+      growthByCollection[col.collection_id] = ((last - first) / base) * 100;
+    }
+
+    res.json({ success: true, collections, previews: previewsByCollection, spark: sparkByCollection, growth: growthByCollection });
   } catch (error) {
     console.error('Erro ao listar coleções em destaque:', error);
     res.status(500).json({ success: false, message: 'Erro ao listar destaques' });
@@ -311,16 +456,47 @@ router.get('/:collectionId', async (req, res) => {
     const query = `
       SELECT 
         c.*,
-        COUNT(n.nft_id) as nfts_count,
-        u.cpf as creator_cpf
+        c.cover_image_url AS banner_image,
+        u.first_name, u.last_name,
+        (COALESCE(u.first_name,'') || CASE WHEN u.last_name IS NOT NULL THEN ' ' || u.last_name ELSE '' END) AS creator_name,
+        COUNT(DISTINCT n.nft_id) as nfts_count,
+        u.cpf as creator_cpf,
+        COALESCE(SUM(fav_counts.total), 0)::int AS total_favorites,
+        (
+          SELECT MIN(n2.price)::float FROM nfts n2
+          WHERE n2.collection_id = c.collection_id AND n2.price IS NOT NULL AND n2.price > 0
+            AND n2.status IN ('listed','for_sale')
+        ) AS floor_price_calc,
+        (
+          SELECT COALESCE(SUM(t.amount_eth), 0)::float
+          FROM transactions t JOIN nfts n3 ON n3.nft_id = t.nft_id
+          WHERE n3.collection_id = c.collection_id AND t.transaction_type IN ('nft_sale')
+        ) AS total_volume_calc,
+        (
+          SELECT COUNT(*)::int FROM nfts n4
+          WHERE n4.collection_id = c.collection_id AND n4.status IN ('listed','for_sale')
+        ) AS listed_count,
+        CASE WHEN COUNT(DISTINCT n.nft_id) = 0 THEN 0
+             ELSE ROUND((
+               (
+                 SELECT COUNT(*) FROM nfts n5
+                 WHERE n5.collection_id = c.collection_id AND n5.status IN ('listed','for_sale')
+               )::numeric * 100
+             ) / COUNT(DISTINCT n.nft_id), 2)::float
+        END AS listed_percent
       FROM collections c
       LEFT JOIN nfts n ON c.collection_id = n.collection_id
       LEFT JOIN users u ON c.creator_id = u.user_id
+      LEFT JOIN (
+        SELECT nft_id, COUNT(*)::int AS total 
+        FROM nft_favorites 
+        GROUP BY nft_id
+      ) fav_counts ON fav_counts.nft_id = n.nft_id
       WHERE c.collection_id = $1
-      GROUP BY c.collection_id, u.cpf
+      GROUP BY c.collection_id, u.cpf, u.first_name, u.last_name
     `;
 
-    const result = await pool.query(query, [collectionId]);
+  const result = await pool.query(query, [collectionId]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -329,10 +505,15 @@ router.get('/:collectionId', async (req, res) => {
       });
     }
 
-    res.json({
-      success: true,
-      collection: result.rows[0]
-    });
+    if (result.rows.length > 0) {
+      const r = result.rows[0];
+      const normalized = {
+        ...r,
+        floor_price: r.floor_price_calc != null ? r.floor_price_calc : r.floor_price,
+        total_volume: r.total_volume_calc != null ? r.total_volume_calc : r.total_volume,
+      };
+      return res.json({ success: true, collection: normalized });
+    }
 
   } catch (error) {
     console.error('Erro ao buscar coleção:', error);
@@ -348,15 +529,21 @@ router.get('/:collectionId', async (req, res) => {
 router.get('/:collectionId/nfts', async (req, res) => {
   try {
     const { collectionId } = req.params;
+    const userId = getUserIdFromAuthHeader(req);
 
     const query = `
-      SELECT nft_id, token_id, name, description, image_url, prompt, status, created_at
-      FROM nfts
-      WHERE collection_id = $1
-      ORDER BY created_at DESC
+      SELECT 
+        n.nft_id, n.token_id, n.name, n.description, n.image_url, n.prompt, n.status, n.created_at,
+        COALESCE((SELECT COUNT(*) FROM nft_favorites f WHERE f.nft_id = n.nft_id), 0)::int AS favorites_count,
+        CASE WHEN $2::uuid IS NULL THEN FALSE ELSE EXISTS (
+          SELECT 1 FROM nft_favorites f2 WHERE f2.nft_id = n.nft_id AND f2.user_id = $2::uuid
+        ) END AS is_favorited
+      FROM nfts n
+      WHERE n.collection_id = $1
+      ORDER BY n.created_at DESC
     `;
 
-    const result = await pool.query(query, [collectionId]);
+    const result = await pool.query(query, [collectionId, userId]);
 
     res.json({
       success: true,
@@ -378,7 +565,37 @@ router.get('/:collectionId/nfts', async (req, res) => {
 router.put('/:collectionId', async (req, res) => {
   try {
     const { collectionId } = req.params;
-  const { name, description, banner_image, is_featured } = req.body;
+    const userId = getUserIdFromAuthHeader(req);
+    
+    console.log('[PUT] Tentativa de edição:', { collectionId, userId });
+    
+    if (!userId) return res.status(401).json({ success: false, message: 'Não autenticado.' });
+
+    // Admins podem tudo; caso contrário, precisa ser o criador da coleção
+    const rAdmins = await pool.query(`SELECT COUNT(*)::int AS c FROM users WHERE role = 'admin'`);
+    let isAdmin = false;
+    if ((rAdmins.rows?.[0]?.c || 0) === 0) {
+      isAdmin = true; // bootstrap
+    } else {
+      const r = await pool.query('SELECT role FROM users WHERE user_id = $1', [userId]);
+      isAdmin = (r.rows?.[0]?.role || 'user') === 'admin';
+      console.log('[PUT] Verificação admin:', { userId, role: r.rows?.[0]?.role, isAdmin });
+    }
+
+    if (!isAdmin) {
+      const own = await pool.query('SELECT creator_id FROM collections WHERE collection_id = $1', [collectionId]);
+      console.log('[PUT] Verificação propriedade:', { 
+        collectionId, 
+        creatorId: own.rows?.[0]?.creator_id, 
+        userId, 
+        match: own.rows?.[0]?.creator_id === userId 
+      });
+      
+      if (own.rows.length === 0 || own.rows[0].creator_id !== userId) {
+        return res.status(403).json({ success: false, message: 'Sem permissão para editar esta coleção.' });
+      }
+    }
+    const { name, description, cover_image_url, is_featured } = req.body;
 
     const updates = [];
     const values = [];
@@ -387,15 +604,23 @@ router.put('/:collectionId', async (req, res) => {
     if (name !== undefined) {
       updates.push(`name = $${paramCount++}`);
       values.push(name);
+      
+      // Atualiza o slug se o nome mudou
+      const slug = name.toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      updates.push(`slug = $${paramCount++}`);
+      values.push(slug);
     }
     if (description !== undefined) {
       updates.push(`description = $${paramCount++}`);
       values.push(description);
     }
-    if (banner_image !== undefined) {
-      // Compat: atualizar a coluna correta do schema
+    if (cover_image_url !== undefined) {
       updates.push(`cover_image_url = $${paramCount++}`);
-      values.push(banner_image);
+      values.push(cover_image_url);
     }
     if (is_featured !== undefined) {
       updates.push(`is_featured = $${paramCount++}`);
@@ -447,6 +672,35 @@ router.put('/:collectionId', async (req, res) => {
 router.delete('/:collectionId', async (req, res) => {
   try {
     const { collectionId } = req.params;
+    const userId = getUserIdFromAuthHeader(req);
+    
+    console.log('[DELETE] Tentativa de exclusão:', { collectionId, userId });
+    
+    if (!userId) return res.status(401).json({ success: false, message: 'Não autenticado.' });
+
+    const rAdmins = await pool.query(`SELECT COUNT(*)::int AS c FROM users WHERE role = 'admin'`);
+    let isAdmin = false;
+    if ((rAdmins.rows?.[0]?.c || 0) === 0) {
+      isAdmin = true; // bootstrap
+    } else {
+      const r = await pool.query('SELECT role FROM users WHERE user_id = $1', [userId]);
+      isAdmin = (r.rows?.[0]?.role || 'user') === 'admin';
+      console.log('[DELETE] Verificação admin:', { userId, role: r.rows?.[0]?.role, isAdmin });
+    }
+
+    if (!isAdmin) {
+      const own = await pool.query('SELECT creator_id FROM collections WHERE collection_id = $1', [collectionId]);
+      console.log('[DELETE] Verificação propriedade:', { 
+        collectionId, 
+        creatorId: own.rows?.[0]?.creator_id, 
+        userId,
+        match: own.rows?.[0]?.creator_id === userId 
+      });
+      
+      if (own.rows.length === 0 || own.rows[0].creator_id !== userId) {
+        return res.status(403).json({ success: false, message: 'Sem permissão para excluir esta coleção.' });
+      }
+    }
 
     const result = await pool.query(
       'DELETE FROM collections WHERE collection_id = $1 RETURNING *',

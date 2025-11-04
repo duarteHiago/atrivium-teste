@@ -3,6 +3,7 @@ import styled from 'styled-components'
 import { useNavigate } from 'react-router-dom'
 import Logo from './Logo'
 import BarraDePesquisa from './BarraDePesquisa'
+import { API_BASE } from '../../config/api'
 
 const BarraEstilizada = styled.header`
    position: fixed;
@@ -62,6 +63,29 @@ const HeaderButtonGroup = styled.div`
   align-items: center;
   gap: 15px;
   padding-right: 20px;
+`;
+
+const BalanceBadge = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: #9be3b8;
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+
+  @media (max-width: 860px) {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
+
+  @media (max-width: 640px) {
+    display: none;
+  }
 `;
 
 const WalletButton = styled.button`
@@ -135,11 +159,39 @@ const BarraSuperior = ({
 }) => {
   
   const [hovered, setHovered] = useState(false);
+  const [balance, setBalance] = useState(null);
   const navigate = useNavigate();
   
   useEffect(() => {
     if (!$isOpen) setHovered(false); // Usa com $
   }, [$isOpen]); // Usa com $
+
+  // Buscar saldo da carteira quando logar e quando solicitar refresh
+  useEffect(() => {
+    const load = async () => {
+      try {
+        if (!isLoggedIn) { setBalance(null); return; }
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const res = await fetch(`${API_BASE}/api/wallet/balance`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const b = parseFloat(data.balance_eth || 0);
+          if (!Number.isNaN(b)) setBalance(b);
+        }
+      } catch {
+        // silencioso
+      }
+    };
+
+    load();
+
+    const onRefresh = () => load();
+    window.addEventListener('wallet:refresh', onRefresh);
+    return () => window.removeEventListener('wallet:refresh', onRefresh);
+  }, [isLoggedIn]);
   
   const activeColor = '#9be3b8';
 
@@ -167,6 +219,12 @@ const BarraSuperior = ({
       <Spacer /> 
       
       <HeaderButtonGroup>
+        {balance !== null && (
+          <BalanceBadge title="Seu saldo em carteira">
+            <span>💰</span>
+            <span>{balance.toFixed(4)} ETH</span>
+          </BalanceBadge>
+        )}
         {/* Toggle dev-only para simular admin (não afeta backend) */}
         <AdminToggle
           active={isAdmin}

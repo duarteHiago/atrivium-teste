@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import styled from 'styled-components';
+import { useNavigate } from 'react-router-dom';
 import CollectionModal from '../CollectionModal/CollectionModal';
+import FavoriteButton from '../FavoriteButton/FavoriteButton';
+import { API_BASE } from '../../config/api';
 
 const Container = styled.div`
   max-width: 1200px;
@@ -44,7 +47,7 @@ const NftCard = styled.div`
   }
 `;
 
-const AddCollectionButton = styled.button`
+const CollectionTag = styled.div`
   position: absolute;
   left: 12px;
   bottom: 12px;
@@ -55,52 +58,10 @@ const AddCollectionButton = styled.button`
   color: white;
   background: rgba(0,0,0,0.35);
   backdrop-filter: blur(6px);
-  cursor: pointer;
-  transition: all .2s;
-
-  &:hover {
-    background: rgba(0,0,0,0.5);
-    border-color: rgba(255,255,255,0.35);
-  }
-`;
-
-const CollectionTagButton = styled(AddCollectionButton)`
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   max-width: 70%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-`;
-
-const DropdownMenu = styled.div`
-  position: absolute;
-  left: 12px;
-  bottom: 50px;
-  background: rgba(20,20,21,0.98);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 10px;
-  min-width: 200px;
-  box-shadow: 0 10px 24px rgba(0,0,0,0.35);
-  z-index: 101;
-  overflow: hidden;
-`;
-
-const DropdownItem = styled.button`
-  display: block;
-  width: 100%;
-  padding: 10px 12px;
-  background: transparent;
-  color: rgba(255,255,255,0.9);
-  border: none;
-  text-align: left;
-  font-size: 0.95em;
-  cursor: pointer;
-
-  &:hover {
-    background: rgba(255,255,255,0.06);
-  }
 `;
 
 const NftImage = styled.img`
@@ -111,6 +72,14 @@ const NftImage = styled.img`
 
 const NftInfo = styled.div`
   padding: 16px;
+`;
+
+const NftFooter = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 16px 16px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 `;
 
 const NftName = styled.h3`
@@ -171,19 +140,7 @@ const ErrorMessage = styled.div`
   margin: 20px 0;
 `;
 
-const Toast = styled.div`
-  position: fixed;
-  left: 50%;
-  bottom: 24px;
-  transform: translateX(-50%);
-  background: ${p => p.$type === 'error' ? 'rgba(255, 77, 77, 0.15)' : 'rgba(16, 185, 129, 0.15)'};
-  border: 1px solid ${p => p.$type === 'error' ? 'rgba(255, 77, 77, 0.4)' : 'rgba(16, 185, 129, 0.4)'};
-  color: ${p => p.$type === 'error' ? '#ff6b6b' : '#34d399'};
-  padding: 10px 16px;
-  border-radius: 10px;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.35);
-  z-index: 200;
-`;
+// Removido: Toast e botões de dropdown/alteração de coleção (coleção é imutável após criação)
 
 const RefreshButton = styled.button`
   padding: 10px 20px;
@@ -231,41 +188,34 @@ const FloatingButton = styled.button`
 `;
 
 function NftGallery() {
+  const navigate = useNavigate();
   const [nfts, setNfts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isCollectionModalOpen, setIsCollectionModalOpen] = useState(false);
-  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-  const [selectedNft, setSelectedNft] = useState(null);
-  const [openDropdownNftId, setOpenDropdownNftId] = useState(null);
   const [collectionNames, setCollectionNames] = useState({}); // { [collection_id]: name }
-  const [toast, setToast] = useState(null); // { message, type }
-
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 2200);
-  };
 
   const fetchNfts = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const userId = localStorage.getItem('creatorId');
-      
-      console.log('🔍 User ID do localStorage:', userId);
-      
-      if (!userId) {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      if (!token) {
         setError('Você precisa estar logado para ver seus NFTs');
         setLoading(false);
         return;
       }
 
-      const url = `http://localhost:3001/api/leonardo/list?userId=${userId}`;
+      const url = `${API_BASE}/api/users/me/gallery`;
       console.log('📡 Fazendo requisição para:', url);
-      
-      let response = await fetch(url);
-      let data = await response.json();
+
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
 
       console.log('📦 Dados recebidos:', data);
 
@@ -273,15 +223,7 @@ function NftGallery() {
         throw new Error(data.message || 'Erro ao carregar NFTs');
       }
 
-      // Se não há NFTs do usuário, mostra todos como fallback (melhor UX)
-      if ((data.nfts || []).length === 0) {
-        console.log('⚠️ Nenhum NFT do usuário. Buscando todos para exibir...');
-        response = await fetch('http://localhost:3001/api/leonardo/list');
-        data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Erro ao carregar NFTs');
-      }
-
-      setNfts(data.nfts || []);
+      setNfts(Array.isArray(data) ? data : (data.nfts || []));
     } catch (err) {
       console.error('❌ Erro ao buscar NFTs:', err);
       setError(err.message);
@@ -294,19 +236,12 @@ function NftGallery() {
     fetchNfts();
   }, []);
 
-  // Fecha dropdown ao clicar fora
-  useEffect(() => {
-    const onDocClick = () => setOpenDropdownNftId(null);
-    document.addEventListener('click', onDocClick);
-    return () => document.removeEventListener('click', onDocClick);
-  }, []);
-
   // Carrega nomes das coleções para mostrar no selo do card
   useEffect(() => {
     let active = true;
     async function loadNames() {
       try {
-        const res = await fetch('http://localhost:3001/api/collections/list');
+  const res = await fetch(`${API_BASE}/api/collections/list`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || 'Erro ao carregar coleções');
         if (!active) return;
@@ -335,7 +270,7 @@ function NftGallery() {
     <Container>
       <Title>🖼️ Minha Galeria</Title>
       <Subtitle>
-        {nfts.length} NFT{nfts.length !== 1 ? 's' : ''} criado{nfts.length !== 1 ? 's' : ''} por você
+        {nfts.length} NFT{nfts.length !== 1 ? 's' : ''} que você possui
       </Subtitle>
 
       <RefreshButton onClick={fetchNfts}>
@@ -350,70 +285,37 @@ function NftGallery() {
 
       {nfts.length === 0 && !error && (
         <EmptyState>
-          Você ainda não criou nenhum NFT. Comece agora!
+          Você ainda não possui nenhum NFT.
         </EmptyState>
       )}
 
       <Grid>
         {nfts.map((nft) => (
-          <NftCard key={nft.nft_id}>
-            <FallbackImage nft={nft} />
-            {nft.collection_id ? (
-              <>
-                <CollectionTagButton
-                  type="button"
-                  title={collectionNames[nft.collection_id] || 'Coleção'}
-                  onClick={(e) => { e.stopPropagation(); setOpenDropdownNftId(prev => prev === nft.nft_id ? null : nft.nft_id); }}
-                >
-                  📂 {collectionNames[nft.collection_id] || 'Coleção'} ▾
-                </CollectionTagButton>
-                {openDropdownNftId === nft.nft_id && (
-                  <DropdownMenu onClick={(e) => e.stopPropagation()}>
-                    <DropdownItem onClick={() => { setOpenDropdownNftId(null); setSelectedNft(nft); setIsAssignModalOpen(true); }}>
-                      Alterar coleção…
-                    </DropdownItem>
-                    <DropdownItem onClick={async () => {
-                      try {
-                        setOpenDropdownNftId(null);
-                        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-                        const res = await fetch(`http://localhost:3001/api/leonardo/${nft.nft_id}/collection`, {
-                          method: 'PATCH',
-                          headers: {
-                            'Content-Type': 'application/json',
-                            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-                          },
-                          body: JSON.stringify({ collection_id: null })
-                        });
-                        const data = await res.json();
-                        if (!res.ok) throw new Error(data.message || 'Erro ao remover da coleção');
-                        await fetchNfts();
-                        showToast('Removido da coleção');
-                      } catch (err) {
-                        setError(err.message);
-                        showToast(err.message, 'error');
-                      }
-                    }}>
-                      Remover da coleção
-                    </DropdownItem>
-                  </DropdownMenu>
-                )}
-              </>
-            ) : (
-              <AddCollectionButton
-                type="button"
-                title="Adicionar a uma coleção"
-                onClick={(e) => { e.stopPropagation(); setSelectedNft(nft); setIsAssignModalOpen(true); }}
-              >
-                ➕ Coleção
-              </AddCollectionButton>
+          <NftCard key={nft.nft_id} onClick={() => navigate(`/nft/${nft.nft_id}`)}>
+            <NftImage src={nft.image_url} alt={nft.name} />
+            {nft.collection_id && (
+              <CollectionTag title={collectionNames[nft.collection_id] || 'Coleção'}>
+                📂 {collectionNames[nft.collection_id] || 'Coleção'}
+              </CollectionTag>
             )}
             <NftInfo>
               <NftName>{nft.name}</NftName>
               <NftPrompt>{nft.prompt}</NftPrompt>
+            </NftInfo>
+            <NftFooter>
               <NftDate>
                 {new Date(nft.created_at).toLocaleDateString('pt-BR')}
               </NftDate>
-            </NftInfo>
+              <div onClick={(e) => e.stopPropagation()}>
+                <FavoriteButton 
+                  nftId={nft.nft_id}
+                  initialCount={nft.favorites_count || 0}
+                  initialIsFavorited={nft.is_favorited || false}
+                  showCount={true}
+                  compact={true}
+                />
+              </div>
+            </NftFooter>
           </NftCard>
         ))}
       </Grid>
@@ -431,122 +333,8 @@ function NftGallery() {
         }}
       />
 
-      {/* Modal para atribuir um NFT a uma coleção */}
-      <CollectionModal
-        isOpen={isAssignModalOpen}
-        onClose={() => { setIsAssignModalOpen(false); setSelectedNft(null); }}
-        onSelect={async (collection) => {
-          try {
-            if (!selectedNft) return;
-            const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-            const res = await fetch(`http://localhost:3001/api/leonardo/${selectedNft.nft_id}/collection`, {
-              method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-              },
-              body: JSON.stringify({ collection_id: collection?.collection_id || null })
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.message || 'Erro ao atribuir coleção');
-            console.log('✅ NFT adicionado à coleção:', data);
-            setIsAssignModalOpen(false);
-            setSelectedNft(null);
-            setOpenDropdownNftId(null);
-            // Recarrega a galeria para refletir na aba Collections também
-            await fetchNfts();
-            if (collection?.collection_id && collection?.name) {
-              setCollectionNames(prev => ({ ...prev, [collection.collection_id]: collection.name }));
-              showToast(`Adicionado à coleção: ${collection.name}`);
-            } else {
-              showToast('Coleção atualizada');
-            }
-          } catch (err) {
-            console.error('❌ Falha ao adicionar à coleção:', err);
-            setError(err.message);
-            showToast(err.message, 'error');
-          }
-        }}
-      />
-
-      {toast && (
-        <Toast $type={toast.type}>{toast.message}</Toast>
-      )}
     </Container>
   );
 }
 
 export default NftGallery;
-
-// --- Utilidades de imagem com fallback de gateways ---
-function extractCidFromUrl(url) {
-  try {
-    if (!url) return null;
-    // ipfs://CID
-    if (url.startsWith('ipfs://')) {
-      return url.replace('ipfs://', '').split('/')[0];
-    }
-    const u = new URL(url, window.location.origin);
-    // Formatos comuns: https://gateway.pinata.cloud/ipfs/CID[/path]
-    const parts = u.pathname.split('/').filter(Boolean);
-    const ipfsIdx = parts.indexOf('ipfs');
-    if (ipfsIdx >= 0 && parts.length > ipfsIdx + 1) {
-      return parts[ipfsIdx + 1];
-    }
-    // custom gateways podem usar /ipfs/ também; acima cobre.
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function buildCandidateUrls(nft) {
-  const urls = [];
-  const base = import.meta?.env?.VITE_API_BASE || 'http://localhost:3001';
-  const img = nft?.image_url || nft?.imageUrl || '';
-
-  // Se for caminho local
-  if (img && img.startsWith('/uploads/')) {
-    urls.push(`${base}${img}`);
-  }
-
-  // Se já for uma URL absoluta, tenta como primeira opção
-  if (img && /^https?:\/\//i.test(img)) {
-    urls.push(img);
-  }
-
-  // Se conseguirmos extrair o CID, gera gateways alternativos
-  const cid = extractCidFromUrl(img) || nft?.ipfs_hash || nft?.ipfsHash || null;
-  if (cid) {
-    urls.push(
-      `https://gateway.pinata.cloud/ipfs/${cid}`,
-      `https://ipfs.io/ipfs/${cid}`,
-      `https://cloudflare-ipfs.com/ipfs/${cid}`
-    );
-    // Se o usuário tiver um subdomínio mypinata.cloud, podemos tentar também
-    const custom = import.meta?.env?.VITE_PINATA_SUBDOMAIN; // ex: sapphire-added-...mypinata.cloud
-    if (custom) {
-      urls.push(`https://${custom}/ipfs/${cid}`);
-    }
-  }
-
-  // Remove duplicados preservando ordem
-  return Array.from(new Set(urls.filter(Boolean)));
-}
-
-function FallbackImage({ nft }) {
-  const candidates = buildCandidateUrls(nft);
-  const [idx, setIdx] = useState(0);
-  const src = candidates[idx] || '';
-
-  return (
-    <NftImage
-      src={src}
-      alt={nft?.name || 'NFT'}
-      onError={() => {
-        // Avança para o próximo candidato se houver erro
-        setIdx((i) => (i + 1 < candidates.length ? i + 1 : i));
-      }}
-    />
-  );
-}

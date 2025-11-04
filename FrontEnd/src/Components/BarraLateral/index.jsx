@@ -1,5 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
+import { API_BASE } from '../../config/api';
 
 const NavContainer = styled.nav`
   position: fixed;
@@ -86,9 +87,13 @@ const Footer = styled.div`
   padding: 12px 0 8px 0;
 `;
 
+// (removido) bloco de saldo movido para a barra superior
+
 // 2. RECEBA A PROP COM $
 // Recebe também uma prop para abrir a aba CMS e o flag isAdmin
 const BarraLateral = ({ $isOpen, sidebarRef, onOpenCms, isAdmin = false, onGoHome }) => {
+  // saldo removido daqui; agora é exibido na barra superior
+
   return (
     // 3. PASSE A PROP COM $
     <NavContainer ref={sidebarRef} $isOpen={$isOpen}>
@@ -100,11 +105,23 @@ const BarraLateral = ({ $isOpen, sidebarRef, onOpenCms, isAdmin = false, onGoHom
         >
           Collections
         </MenuItem>
-        <MenuItem href="#">Tokens</MenuItem>
-        <MenuItem href="#">Drops</MenuItem>
-        <MenuItem href="#">Activity</MenuItem>
+        <MenuItem
+          as="button"
+          onClick={() => { try { window.location.hash = ''; } catch { /* ignore */ } window.history.pushState({}, '', '/marketplace'); window.dispatchEvent(new PopStateEvent('popstate')); }}
+        >
+          🛒 Marketplace
+        </MenuItem>
+  {/* Itens removidos: Tokens, Drops */}
+        <MenuItem
+          as="button"
+          onClick={() => { try { window.location.hash = ''; } catch { /* ignore */ } window.history.pushState({}, '', '/activity'); window.dispatchEvent(new PopStateEvent('popstate')); }}
+        >
+          Activity
+        </MenuItem>
   <MenuItem as="button" onClick={() => { try { window.location.hash = ''; } catch { /* ignore */ } window.history.pushState({}, '', '/profile'); window.dispatchEvent(new PopStateEvent('popstate')); }}>Profile</MenuItem>
       </MenuList>
+
+      {/* indicador de saldo foi movido para a barra superior */}
 
       {/* Footer com o botão CMS somente para admin */}
       {isAdmin && (

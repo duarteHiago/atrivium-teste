@@ -64,12 +64,10 @@ const ProfileDropdown = ({ onLogout, onGoProfile, onGoSettings, onClose }) => {
       <DropdownMenu role="menu" aria-label="Profile menu">
   <MenuItem as="button" onClick={onGoProfile} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>Profile</MenuItem>
         <MenuItem as="button" onClick={() => { window.history.pushState({}, '', '/gallery'); window.dispatchEvent(new PopStateEvent('popstate')); }} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>Galleries</MenuItem>
-        <MenuItem href="#">NFTs</MenuItem>
-      <MenuItem href="#">Listings</MenuItem>
-      <MenuItem href="#">Portfolio</MenuItem>
+        {/* Itens removidos: NFTs, Listings, Portfolio */}
       <MenuSeparator />
-  <MenuItem as="button" onClick={onGoSettings} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>Settings</MenuItem>
-      <MenuItem href="#" onClick={onLogout}>
+      <MenuItem as="button" onClick={onGoSettings} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>Settings</MenuItem>
+      <MenuItem as="button" onClick={(e) => { e.preventDefault(); onLogout(); }} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>
         Sair (Logout)
       </MenuItem>
       </DropdownMenu>

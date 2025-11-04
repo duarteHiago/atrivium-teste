@@ -25,6 +25,7 @@ const nftRoutes = require('./src/routes/nft.routes');
 const leonardoRoutes = require('./src/routes/leonardo.routes'); // Rotas da API Leonardo
 const collectionRoutes = require('./src/routes/collection.routes'); // Rotas de Coleções
 const ipfsRoutes = require('./src/routes/ipfs.routes'); // Rotas de IPFS/Pinata
+const walletRoutes = require('./src/routes/wallet.routes'); // Rotas de Carteira
 
 // Middlewares
 app.use(cors()); // Permite requisições do frontend
@@ -37,7 +38,16 @@ app.use('/uploads', express.static('uploads'));
 // Usar rotas
 app.use('/api/leonardo', leonardoRoutes); // Rotas da API Leonardo
 app.use('/api/collections', collectionRoutes); // Rotas de Coleções
+console.log('📍 Registrando rotas IPFS em /api/ipfs');
 app.use('/api/ipfs', ipfsRoutes); // Rotas de IPFS/Pinata
+console.log('✅ Rotas IPFS registradas');
+app.use('/api/wallet', walletRoutes); // Rotas de Carteira
+console.log('✅ Rotas de Carteira registradas');
+
+// Rota de teste simples
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'Servidor funcionando!' });
+});
 
 // Configuração da Conexão com o Banco de Dados (lê do .env)
 const pool = new Pool({
@@ -68,6 +78,27 @@ pool.query('SELECT NOW()', (err, res) => {
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS banner_url TEXT;`);
+
+    // Garantir colunas necessárias em collections
+    await pool.query(`ALTER TABLE collections ADD COLUMN IF NOT EXISTS cover_image_url VARCHAR(500);`);
+    await pool.query(`ALTER TABLE collections ADD COLUMN IF NOT EXISTS slug VARCHAR(100);`);
+    await pool.query(`ALTER TABLE collections ADD COLUMN IF NOT EXISTS floor_price DECIMAL(18,8) DEFAULT 0;`);
+    await pool.query(`ALTER TABLE collections ADD COLUMN IF NOT EXISTS total_volume DECIMAL(18,8) DEFAULT 0;`);
+    await pool.query(`ALTER TABLE collections ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE;`);
+
+    // Índices/constraints idempotentes
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_collections_slug ON collections(slug);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_collections_featured ON collections(is_featured);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_collections_creator ON collections(creator_id);`);
+
+    // Relacionamento em nfts para collection (se ainda não existir)
+    await pool.query(`ALTER TABLE nfts ADD COLUMN IF NOT EXISTS collection_id UUID REFERENCES collections(collection_id) ON DELETE SET NULL;`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_nfts_collection ON nfts(collection_id);`);
+
+    // Campos IPFS em nfts
+    await pool.query(`ALTER TABLE nfts ADD COLUMN IF NOT EXISTS ipfs_hash VARCHAR(100);`);
+    await pool.query(`ALTER TABLE nfts ADD COLUMN IF NOT EXISTS network VARCHAR(20) DEFAULT 'off-chain';`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_nfts_ipfs ON nfts(ipfs_hash);`);
   } catch (e) {
     console.error('Erro ao ajustar schema de users (role):', e.message);
   }
@@ -169,11 +200,11 @@ app.post('/api/auth/register', async (req, res) => {
     const insertUserQuery = `
       INSERT INTO users (first_name, last_name, cpf, birth_date, email, password_hash, cep, address, gender)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING user_id, email; -- Retorna o ID e email do usuário criado
+      RETURNING user_id, email, first_name, last_name, role; -- Retorna o ID e email do usuário criado
     `;
     const values = [
       firstName, lastName, formattedCPF, birthDate, email,
-      passwordHash, cep, address, gender
+      passwordHash, cep || null, address || null, gender || null
     ];
 
     const newUserResult = await pool.query(insertUserQuery, values);
@@ -330,34 +361,280 @@ app.patch('/api/users/me', authMiddleware, upload.fields([
 app.get('/api/users/me/profile', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.sub;
-    const u = await pool.query(
-      `SELECT user_id, first_name, last_name, email, role, nickname, bio, avatar_url, banner_url
-       FROM users WHERE user_id = $1`, [userId]);
-    if (u.rows.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.' });
 
+    // 1) Tenta buscar usuário com campos estendidos; se falhar por coluna ausente, faz fallback
+    let userRow;
+    try {
+      const u = await pool.query(
+        `SELECT user_id, first_name, last_name, email, role, nickname, bio, avatar_url, banner_url
+         FROM users WHERE user_id = $1`, [userId]);
+      userRow = u.rows[0];
+    } catch (err) {
+      if (err.code === '42703') { // undefined_column
+        const u2 = await pool.query(
+          `SELECT user_id, first_name, last_name, email, role
+           FROM users WHERE user_id = $1`, [userId]);
+        userRow = u2.rows[0];
+      } else {
+        throw err;
+      }
+    }
+    if (!userRow) return res.status(404).json({ message: 'Usuário não encontrado.' });
+
+    // 2) Contagens básicas (tabelas antigas ainda suportam estas colunas)
     const createdCount = await pool.query(`SELECT COUNT(*)::int AS c FROM nfts WHERE creator_id = $1`, [userId]);
     const ownedCount = await pool.query(`SELECT COUNT(*)::int AS c FROM nfts WHERE current_owner_id = $1`, [userId]);
-    const collectionsRes = await pool.query(
-      `SELECT c.collection_id, c.name, c.cover_image_url, c.created_at, COUNT(n.nft_id)::int AS nfts_count
-       FROM collections c
-       LEFT JOIN nfts n ON n.collection_id = c.collection_id
-       WHERE c.creator_id = $1
-       GROUP BY c.collection_id
-       ORDER BY c.created_at DESC`, [userId]);
 
-    res.json({
-      user: u.rows[0],
+    // 3) Coleções do usuário — tenta com cover_image_url; se falhar, usa fallback sem a coluna
+    let collectionsRows = [];
+    try {
+      const r = await pool.query(
+        `SELECT c.collection_id, c.name, c.cover_image_url AS banner_url, c.created_at, 
+                COUNT(DISTINCT n.nft_id)::int AS nfts_count,
+                COALESCE(SUM(fav_counts.total), 0)::int AS total_favorites
+         FROM collections c
+         LEFT JOIN nfts n ON n.collection_id = c.collection_id
+         LEFT JOIN (
+           SELECT nft_id, COUNT(*)::int AS total 
+           FROM nft_favorites 
+           GROUP BY nft_id
+         ) fav_counts ON fav_counts.nft_id = n.nft_id
+         WHERE c.creator_id = $1
+         GROUP BY c.collection_id
+         ORDER BY c.created_at DESC`, [userId]);
+      collectionsRows = r.rows;
+    } catch (err) {
+      if (err.code === '42703' || err.code === '42P01') { // undefined_column ou relation does not exist
+        const r2 = await pool.query(
+          `SELECT c.collection_id, c.name, c.created_at, COUNT(n.nft_id)::int AS nfts_count
+           FROM collections c
+           LEFT JOIN nfts n ON n.collection_id = c.collection_id
+           WHERE c.creator_id = $1
+           GROUP BY c.collection_id
+           ORDER BY c.created_at DESC`, [userId]);
+        // Compat: banner_url ausente
+        collectionsRows = r2.rows.map(row => ({ ...row, banner_url: null }));
+      } else {
+        throw err;
+      }
+    }
+
+    return res.json({
+      user: userRow,
       stats: {
-        created: createdCount.rows[0].c,
-        owned: ownedCount.rows[0].c,
-        collections: collectionsRes.rows.length,
+        created: createdCount.rows[0]?.c ?? 0,
+        owned: ownedCount.rows[0]?.c ?? 0,
+        collections: collectionsRows.length,
         transactions: 0
       },
-      collections: collectionsRes.rows
+      collections: collectionsRows
     });
   } catch (e) {
     console.error('Erro no profile enriquecido:', e);
     res.status(500).json({ message: 'Erro ao carregar perfil.' });
+  }
+});
+
+// Atividade do usuário autenticado (compras, vendas e criações)
+app.get('/api/users/me/activity', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 30;
+    const offset = (page - 1) * limit;
+
+    // Consulta unificada: transações (compras/vendas) + criações
+    // 1) Transações em que o usuário participou (compras/vendas)
+    const txQuery = `
+      SELECT 
+        t.transaction_id,
+        t.created_at,
+        t.amount_eth,
+        t.from_user_id,
+        t.to_user_id,
+        n.nft_id,
+        n.name AS nft_name,
+        n.image_url AS nft_image_url,
+        c.name AS collection_name,
+        fu.first_name AS from_first_name,
+        fu.last_name AS from_last_name,
+        fu.nickname AS from_nickname,
+        fu.avatar_url AS from_avatar,
+        tu.first_name AS to_first_name,
+        tu.last_name AS to_last_name,
+        tu.nickname AS to_nickname,
+        tu.avatar_url AS to_avatar
+      FROM transactions t
+      LEFT JOIN nfts n ON n.nft_id = t.nft_id
+      LEFT JOIN collections c ON n.collection_id = c.collection_id
+      LEFT JOIN users fu ON fu.user_id = t.from_user_id
+      LEFT JOIN users tu ON tu.user_id = t.to_user_id
+      WHERE t.transaction_type = 'nft_sale'
+        AND (t.from_user_id = $1::uuid OR t.to_user_id = $1::uuid)
+      ORDER BY t.created_at DESC
+      LIMIT $2 OFFSET $3
+    `;
+    const txResult = await pool.query(txQuery, [userId, limit, offset]);
+
+    const txItems = txResult.rows.map(row => ({
+      event_type: String(row.from_user_id) === String(userId) ? 'sold' : 'bought',
+      created_at: row.created_at,
+      transaction_id: row.transaction_id,
+      amount_eth: row.amount_eth !== null ? parseFloat(row.amount_eth) : null,
+      nft: row.nft_id ? {
+        nft_id: row.nft_id,
+        name: row.nft_name,
+        image_url: row.nft_image_url,
+        collection_name: row.collection_name || null
+      } : null,
+      from_user: row.from_user_id ? {
+        user_id: row.from_user_id,
+        name: row.from_nickname || `${row.from_first_name || ''} ${row.from_last_name || ''}`.trim(),
+        avatar_url: row.from_avatar || null
+      } : null,
+      to_user: row.to_user_id ? {
+        user_id: row.to_user_id,
+        name: row.to_nickname || `${row.to_first_name || ''} ${row.to_last_name || ''}`.trim(),
+        avatar_url: row.to_avatar || null
+      } : null
+    }));
+
+    // 2) Criações do usuário (sem paginação aqui; paginaremos após merge)
+    const createdQuery = `
+      SELECT n.nft_id, n.name AS nft_name, n.image_url AS nft_image_url, n.created_at,
+             c.name AS collection_name
+      FROM nfts n
+      LEFT JOIN collections c ON n.collection_id = c.collection_id
+      WHERE n.creator_id = $1::uuid
+      ORDER BY n.created_at DESC
+      LIMIT 200
+    `;
+    const createdRes = await pool.query(createdQuery, [userId]);
+    const createdItems = createdRes.rows.map(row => ({
+      event_type: 'created',
+      created_at: row.created_at,
+      transaction_id: null,
+      amount_eth: null,
+      nft: {
+        nft_id: row.nft_id,
+        name: row.nft_name,
+        image_url: row.nft_image_url,
+        collection_name: row.collection_name || null
+      },
+      from_user: null,
+      to_user: null
+    }));
+
+    // 3) Merge, ordenar e paginar
+    const merged = [...txItems, ...createdItems]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const activity = merged.slice(offset, offset + limit);
+
+    res.json({ success: true, activity, pagination: { page, limit } });
+  } catch (e) {
+    console.error('Erro ao carregar atividade do usuário:', e?.message || e);
+    res.status(500).json({ success: false, message: 'Erro ao carregar atividade.' });
+  }
+});
+
+// Perfil público por ID (somente campos não sensíveis)
+app.get('/api/users/:id/public-profile', async (req, res) => {
+  try {
+    const targetId = req.params.id;
+    if (!targetId) return res.status(400).json({ message: 'ID do usuário é obrigatório.' });
+
+    // Busca dados públicos do usuário
+    let userRow;
+    try {
+      const u = await pool.query(
+        `SELECT user_id, first_name, last_name, email, nickname, bio, avatar_url, banner_url
+         FROM users WHERE user_id = $1`, [targetId]);
+      userRow = u.rows[0];
+    } catch (err) {
+      if (err.code === '42703') {
+        const u2 = await pool.query(
+          `SELECT user_id, first_name, last_name, email
+           FROM users WHERE user_id = $1`, [targetId]);
+        userRow = u2.rows[0];
+      } else {
+        throw err;
+      }
+    }
+    if (!userRow) return res.status(404).json({ message: 'Usuário não encontrado.' });
+
+    // Contagens básicas
+    const createdCount = await pool.query(`SELECT COUNT(*)::int AS c FROM nfts WHERE creator_id = $1`, [targetId]);
+    const ownedCount = await pool.query(`SELECT COUNT(*)::int AS c FROM nfts WHERE current_owner_id = $1`, [targetId]);
+
+    // Coleções do usuário (público)
+    let collectionsRows = [];
+    try {
+      const r = await pool.query(
+        `SELECT c.collection_id, c.name, c.cover_image_url AS banner_url, c.created_at, 
+                COUNT(DISTINCT n.nft_id)::int AS nfts_count,
+                COALESCE(SUM(fav_counts.total), 0)::int AS total_favorites
+         FROM collections c
+         LEFT JOIN nfts n ON n.collection_id = c.collection_id
+         LEFT JOIN (
+           SELECT nft_id, COUNT(*)::int AS total 
+           FROM nft_favorites 
+           GROUP BY nft_id
+         ) fav_counts ON fav_counts.nft_id = n.nft_id
+         WHERE c.creator_id = $1
+         GROUP BY c.collection_id
+         ORDER BY c.created_at DESC`, [targetId]);
+      collectionsRows = r.rows;
+    } catch (err) {
+      if (err.code === '42703' || err.code === '42P01') {
+        const r2 = await pool.query(
+          `SELECT c.collection_id, c.name, c.created_at, COUNT(n.nft_id)::int AS nfts_count
+           FROM collections c
+           LEFT JOIN nfts n ON n.collection_id = c.collection_id
+           WHERE c.creator_id = $1
+           GROUP BY c.collection_id
+           ORDER BY c.created_at DESC`, [targetId]);
+        collectionsRows = r2.rows.map(row => ({ ...row, banner_url: null }));
+      } else {
+        throw err;
+      }
+    }
+
+    // NFTs criados
+    const createdNfts = await pool.query(
+      `SELECT n.nft_id, n.token_id, n.name, n.description, n.image_url, n.prompt, n.status, n.created_at,
+              COUNT(f.favorite_id)::int as favorites_count
+       FROM nfts n
+       LEFT JOIN nft_favorites f ON n.nft_id = f.nft_id
+       WHERE n.creator_id = $1
+       GROUP BY n.nft_id
+       ORDER BY n.created_at DESC
+       LIMIT 20`, [targetId]);
+
+    // NFTs possuídos
+    const ownedNfts = await pool.query(
+      `SELECT n.nft_id, n.token_id, n.name, n.description, n.image_url, n.prompt, n.status, n.created_at,
+              COUNT(f.favorite_id)::int as favorites_count
+       FROM nfts n
+       LEFT JOIN nft_favorites f ON n.nft_id = f.nft_id
+       WHERE n.current_owner_id = $1
+       GROUP BY n.nft_id
+       ORDER BY n.created_at DESC
+       LIMIT 20`, [targetId]);
+
+    return res.json({
+      user: userRow,
+      stats: {
+        created: createdCount.rows[0]?.c ?? 0,
+        owned: ownedCount.rows[0]?.c ?? 0,
+        collections: collectionsRows.length
+      },
+      collections: collectionsRows,
+      created: createdNfts.rows,
+      owned: ownedNfts.rows
+    });
+  } catch (e) {
+    console.error('Erro no perfil público:', e);
+    res.status(500).json({ message: 'Erro ao carregar perfil público.' });
   }
 });
 
@@ -386,16 +663,16 @@ app.get('/api/users/me/nfts', authMiddleware, async (req, res) => {
   }
 });
 
-// Galeria do usuário (NFTs criados + possuídos sem duplicatas)
+// Galeria do usuário (apenas NFTs que possui atualmente)
 app.get('/api/users/me/gallery', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.sub;
-    // União de NFTs criados e possuídos, sem duplicatas
+    // Apenas NFTs que o usuário possui atualmente (current_owner_id)
     const r = await pool.query(
-      `SELECT DISTINCT ON (nft_id) nft_id, token_id, name, description, image_url, prompt, style, status, created_at, creator_id, current_owner_id
+      `SELECT nft_id, token_id, name, description, image_url, prompt, style, status, created_at, creator_id, current_owner_id, collection_id
        FROM nfts 
-       WHERE creator_id = $1 OR current_owner_id = $1 
-       ORDER BY nft_id, created_at DESC`, [userId]);
+       WHERE current_owner_id = $1 
+       ORDER BY created_at DESC`, [userId]);
     res.json({ nfts: r.rows, total: r.rows.length });
   } catch (e) {
     console.error('Erro ao listar galeria:', e);
@@ -491,6 +768,12 @@ app.post('/api/admin/collections/featured-set', authMiddleware, requireAdmin, as
 });
 
 // Inicia o servidor
-app.listen(port, () => {
+const server = app.listen(port, '0.0.0.0', () => {
   console.log(`Servidor backend rodando na porta ${port}`);
+  console.log(`Acesse: http://localhost:${port}/api/test`);
+});
+
+server.on('error', (err) => {
+  console.error('Erro ao iniciar servidor:', err);
+  process.exit(1);
 });

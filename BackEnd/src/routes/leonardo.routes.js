@@ -4,8 +4,6 @@ const router = express.Router();
 const crypto = require('crypto');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
-const aiService = require('../services/ai.service');
-const tokenizationService = require('../services/tokenization.service');
 const ipfsService = require('../services/ipfs.service');
 
 // Configuração do banco de dados
@@ -23,16 +21,6 @@ const LEONARDO_API_URL = 'https://cloud.leonardo.ai/api/rest/v1';
 // Função auxiliar para gerar hash SHA-256
 function generateHash(data) {
   return crypto.createHash('sha256').update(data).digest('hex');
-}
-
-// Função auxiliar para limitar o tamanho do prompt (Leonardo aceita no máximo ~1500 chars)
-function trimPrompt(prompt, limit = 1500) {
-  const text = String(prompt || '');
-  if (text.length > limit) {
-    console.warn(`Leonardo prompt length ${text.length} exceeds ${limit}. Truncating.`);
-    return text.slice(0, limit);
-  }
-  return text;
 }
 
 // Função auxiliar para chamar a API do Leonardo
@@ -107,7 +95,7 @@ router.post('/generate', async (req, res) => {
 
     // Parâmetros para geração
     const generationParams = {
-      prompt: trimPrompt(prompt),
+      prompt: prompt,
       num_images: numImages,
       width: 512,
       height: 512,
@@ -123,18 +111,7 @@ router.post('/generate', async (req, res) => {
     console.log('Gerando imagem com Leonardo AI:', generationParams);
 
     // Inicia a geração
-    let result;
-    try {
-      result = await callLeonardoAPI('/generations', 'POST', generationParams);
-    } catch (err) {
-      // Se por algum motivo ainda falhar por tamanho, tenta novamente truncando com segurança
-      if ((err.message || '').includes('maximum length')) {
-        generationParams.prompt = trimPrompt(prompt, 1500);
-        result = await callLeonardoAPI('/generations', 'POST', generationParams);
-      } else {
-        throw err;
-      }
-    }
+    const result = await callLeonardoAPI('/generations', 'POST', generationParams);
 
     res.json({
       success: true,
@@ -215,7 +192,7 @@ router.post('/generate-and-save', async (req, res) => {
 
     // Parâmetros para geração
     const generationParams = {
-      prompt: trimPrompt(prompt),
+      prompt: prompt,
       num_images: 1,
       width: 512,
       height: 512,
@@ -229,18 +206,7 @@ router.post('/generate-and-save', async (req, res) => {
     console.log('Iniciando geração de NFT:', generationParams);
 
     // Inicia a geração
-    let initResult;
-    try {
-      initResult = await callLeonardoAPI('/generations', 'POST', generationParams);
-    } catch (err) {
-      // Retry automático com prompt truncado se a API acusar excesso de tamanho
-      if ((err.message || '').includes('maximum length')) {
-        generationParams.prompt = trimPrompt(prompt, 1500);
-        initResult = await callLeonardoAPI('/generations', 'POST', generationParams);
-      } else {
-        throw err;
-      }
-    }
+    const initResult = await callLeonardoAPI('/generations', 'POST', generationParams);
     const generationId = initResult.sdGenerationJob?.generationId;
 
     if (!generationId) {
@@ -281,83 +247,52 @@ router.post('/generate-and-save', async (req, res) => {
       throw new Error('Imagem não encontrada na resposta da API');
     }
 
-    // Baixa a imagem gerada e tenta enviar ao IPFS (se configurado)
-    let imageUrl = imageData.url;
-    let ipfsHash = null;
-    try {
-      if (ipfsService.isConfigured()) {
-        const headers = {
-          'Accept': '*/*',
-          'User-Agent': 'atrivium-backend/1.0 (+node-fetch)'
-        };
-        if (process.env.LEONARDO_API_KEY) {
-          headers['Authorization'] = `Bearer ${process.env.LEONARDO_API_KEY}`;
-          headers['Referer'] = 'https://cloud.leonardo.ai/';
-        }
-        const r = await fetch(imageData.url, { headers });
-        if (!r.ok) throw new Error(`Falha ao baixar imagem do Leonardo: ${r.status} ${r.statusText}`);
-
-        const contentType = (r.headers.get('content-type') || '').toLowerCase();
-        const ab = await r.arrayBuffer();
-        const buf = Buffer.from(ab);
-        if (!buf || buf.length === 0) {
-          throw new Error('Download da imagem retornou buffer vazio');
-        }
-
-        // Define a extensão do arquivo conforme content-type
-        let ext = 'png';
-        if (contentType.includes('jpeg') || contentType.includes('jpg')) ext = 'jpg';
-        else if (contentType.includes('webp')) ext = 'webp';
-        else if (contentType.includes('png')) ext = 'png';
-
-        const fileName = `${crypto.randomUUID()}.${ext}`;
-        // 1) Tenta upload por buffer
-        try {
-          const up = await ipfsService.uploadBuffer(buf, fileName, {
-            name: name || 'NFT Image',
-            description: description || prompt,
-            source: 'leonardo',
-            contentType,
-          });
-          ipfsHash = up.ipfsHash;
-          imageUrl = up.ipfsUrl;
-        } catch (bufErr) {
-          // 2) Fallback: grava arquivo temporário e faz upload por arquivo
-          console.warn('Upload por buffer falhou, tentando via arquivo temporário...', bufErr.message);
-          const os = require('os');
-          const path = require('path');
-          const fs = require('fs');
-          const tmpPath = path.join(os.tmpdir(), fileName);
-          fs.writeFileSync(tmpPath, buf);
-          try {
-            const up2 = await ipfsService.uploadFile(tmpPath, {
-              name: name || 'NFT Image',
-              description: description || prompt,
-              source: 'leonardo',
-              contentType,
-            });
-            ipfsHash = up2.ipfsHash;
-            imageUrl = up2.ipfsUrl;
-          } finally {
-            try { fs.unlinkSync(tmpPath); } catch (_) {}
-          }
-        }
-      }
-    } catch (ipErr) {
-      console.warn('Falha ao subir imagem Leonardo no IPFS. Usando URL original:', ipErr?.response?.data || ipErr.message || ipErr);
-    }
-
     // Gerar hashes
-    const imageHash = generateHash((ipfsHash || imageUrl) + Date.now());
+    const imageHash = generateHash(imageData.url + Date.now());
     const certificateHash = generateHash(imageHash + prompt);
     const tokenId = crypto.randomUUID();
+
+    // Tentar fazer upload para IPFS
+    let ipfsHash = null;
+    let finalImageUrl = imageData.url;
+    let network = 'off-chain';
+
+    try {
+      console.log('📤 Tentando enviar imagem para IPFS...');
+      
+      // Baixar a imagem primeiro
+      const axios = require('axios');
+      const imageResponse = await axios.get(imageData.url, { responseType: 'arraybuffer' });
+      const buffer = Buffer.from(imageResponse.data);
+      
+      // Upload do buffer para IPFS
+      const ipfsResult = await ipfsService.uploadBuffer(
+        buffer,
+        `${tokenId}.png`,
+        { 
+          name: name || `NFT - ${prompt.substring(0, 30)}`,
+          prompt: prompt,
+          createdAt: new Date().toISOString()
+        }
+      );
+      
+      ipfsHash = ipfsResult.ipfsHash;
+      finalImageUrl = ipfsService.getPublicUrl(ipfsHash);
+      network = 'ipfs';
+      
+      console.log(`✅ Imagem enviada para IPFS: ${ipfsHash}`);
+      console.log(`🔗 URL pública: ${finalImageUrl}`);
+    } catch (ipfsError) {
+      console.warn('⚠️ Erro ao enviar para IPFS (continuando com URL original):', ipfsError.message);
+      // Continua com a URL original do Leonardo
+    }
 
     // Salvar no banco de dados
     const insertQuery = `
       INSERT INTO nfts (
         token_id, name, description, prompt, style,
-        image_hash, certificate_hash, image_url, ipfs_hash,
-        status, network,
+        image_hash, certificate_hash, image_url,
+        status, network, ipfs_hash,
         creator_id, current_owner_id, collection_id
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *
@@ -371,10 +306,10 @@ router.post('/generate-and-save', async (req, res) => {
       style || 'default',
       imageHash,
       certificateHash,
-      imageUrl,
-      ipfsHash,
+      finalImageUrl,
       'created',
-      (ipfsHash ? 'ipfs' : 'off-chain'),
+      network,
+      ipfsHash,
       userId,
       userId,
       collection_id || null
@@ -394,107 +329,22 @@ router.post('/generate-and-save', async (req, res) => {
         name: nft.name,
         description: nft.description,
         imageUrl: nft.image_url,
-        ipfsHash: nft.ipfs_hash,
         prompt: nft.prompt,
         imageHash: nft.image_hash,
         certificateHash: nft.certificate_hash,
+        ipfsHash: nft.ipfs_hash,
+        network: nft.network,
         createdAt: nft.created_at
       }
     });
 
   } catch (error) {
-    console.error('Erro ao gerar e salvar NFT (Leonardo):', error.message);
-    // Fallback automático: gera imagem com serviço local/alternativo e salva
-    try {
-      const { prompt, name, description, style, collection_id } = req.body;
-      const userId = getUserIdFromAuthHeader(req);
-
-      const enhancedPrompt = aiService.enhancePrompt(prompt, style || 'stable-diffusion');
-      const imageBuffer = await aiService.generateImage(enhancedPrompt, style || 'stable-diffusion');
-
-      const tokenId = crypto.randomUUID();
-      const filename = `${tokenId}.png`;
-      const filepath = await aiService.saveImage(imageBuffer, filename);
-
-      // Hashes e certificado
-      const imageHash = tokenizationService.generateImageHash(imageBuffer);
-      const certificate = tokenizationService.generateCertificate({
-        tokenId,
-        imageHash,
-        name: name || `NFT - ${enhancedPrompt.substring(0, 30)}`,
-        description: description || `Generated with prompt: ${enhancedPrompt}`,
-        creator: userId,
-        createdAt: new Date(),
-      });
-
-      // Upload IPFS se configurado
-      let imageUrl = `/uploads/${filename}`;
-      let ipfsHash = null;
-      if (ipfsService.isConfigured()) {
-        try {
-          const ipfsResult = await ipfsService.uploadFile(filepath, {
-            name: name || 'NFT Image',
-            description: description || enhancedPrompt,
-            tokenId,
-            creator: userId || 'anonymous',
-            type: 'nft-image',
-          });
-          ipfsHash = ipfsResult.ipfsHash;
-          imageUrl = ipfsResult.ipfsUrl;
-        } catch (e) {
-          console.warn('Falha ao subir no IPFS (fallback continuará com local):', e.message);
-        }
-      }
-
-      const insertQuery = `
-        INSERT INTO nfts (
-          token_id, name, description, prompt, style,
-          image_hash, certificate_hash, image_url, ipfs_hash,
-          status, network,
-          creator_id, current_owner_id, collection_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-        RETURNING *
-      `;
-      const values = [
-        tokenId,
-        name || `NFT - ${enhancedPrompt.substring(0, 30)}`,
-        description || `Generated with prompt: ${enhancedPrompt}`,
-        enhancedPrompt,
-        style || 'stable-diffusion',
-        imageHash,
-        certificate.certificateHash,
-        imageUrl,
-        ipfsHash,
-        'created',
-        ipfsHash ? 'ipfs' : 'off-chain',
-        userId,
-        userId,
-        collection_id || null,
-      ];
-
-      const dbRes = await pool.query(insertQuery, values);
-      const nft = dbRes.rows[0];
-
-      return res.json({
-        success: true,
-        message: 'NFT gerado e salvo com sucesso! (fallback)',
-        nft: {
-          id: nft.nft_id,
-          tokenId: nft.token_id,
-          name: nft.name,
-          description: nft.description,
-          imageUrl: nft.image_url,
-          ipfsHash: nft.ipfs_hash,
-          prompt: nft.prompt,
-          imageHash: nft.image_hash,
-          certificateHash: nft.certificate_hash,
-          createdAt: nft.created_at,
-        },
-      });
-    } catch (fallbackErr) {
-      console.error('Fallback também falhou:', fallbackErr.message);
-      return res.status(500).json({ success: false, message: 'Erro ao gerar e salvar NFT', error: fallbackErr.message });
-    }
+    console.error('Erro ao gerar e salvar NFT:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao gerar e salvar NFT',
+      error: error.message
+    });
   }
 });
 
@@ -502,21 +352,50 @@ router.post('/generate-and-save', async (req, res) => {
 router.get('/list', async (req, res) => {
   try {
     const { userId } = req.query;
+    const requestingUserId = getUserIdFromAuthHeader(req); // Para verificar se o user favoritou
     
     console.log('🔍 GET /list - userId recebido:', userId);
     
-  let query = 'SELECT nft_id, token_id, name, description, image_url, ipfs_hash, network, prompt, status, created_at, creator_id, collection_id FROM nfts';
+    let query = `
+      SELECT 
+        n.nft_id, 
+        n.token_id, 
+        n.name, 
+        n.description, 
+        n.image_url, 
+        n.prompt, 
+        n.status,
+        n.price,
+        n.current_owner_id,
+        n.created_at, 
+        n.creator_id, 
+        n.collection_id, 
+        c.name AS collection_name,
+        n.ipfs_hash, 
+        n.network,
+        n.style,
+        COALESCE(u.nickname, u.first_name || ' ' || u.last_name) as creator_name,
+        u.email as creator_email,
+        u.avatar_url as creator_avatar,
+        COUNT(DISTINCT f.favorite_id)::int as favorites_count,
+        ${requestingUserId ? `EXISTS(SELECT 1 FROM nft_favorites f2 WHERE f2.nft_id = n.nft_id AND f2.user_id = '${requestingUserId}')` : 'false'} as is_favorited
+      FROM nfts n
+      LEFT JOIN users u ON n.creator_id = u.user_id
+      LEFT JOIN collections c ON n.collection_id = c.collection_id
+      LEFT JOIN nft_favorites f ON n.nft_id = f.nft_id
+    `;
     let queryParams = [];
     
     if (userId) {
-      query += ' WHERE creator_id = $1';
+      query += ' WHERE n.creator_id = $1';
       queryParams.push(userId);
       console.log('✅ Filtrando por creator_id:', userId);
     } else {
       console.log('⚠️ Nenhum userId fornecido, retornando todos os NFTs');
     }
     
-    query += ' ORDER BY created_at DESC';
+  query += ' GROUP BY n.nft_id, u.nickname, u.first_name, u.last_name, u.email, u.avatar_url, c.name';
+    query += ' ORDER BY n.created_at DESC';
     
     console.log('📝 Query SQL:', query);
     console.log('📝 Parâmetros:', queryParams);
@@ -545,9 +424,25 @@ router.get('/list', async (req, res) => {
 router.get('/:nftId', async (req, res) => {
   try {
     const { nftId } = req.params;
+    const requestingUserId = getUserIdFromAuthHeader(req);
 
     const result = await pool.query(
-      'SELECT * FROM nfts WHERE nft_id = $1 OR token_id = $1',
+      `SELECT 
+        n.*,
+        COALESCE(creator.nickname, creator.first_name || ' ' || creator.last_name) as creator_name,
+        creator.avatar_url as creator_avatar,
+        COALESCE(owner.nickname, owner.first_name || ' ' || owner.last_name) as owner_name,
+        owner.avatar_url as owner_avatar,
+        c.name AS collection_name,
+        COUNT(DISTINCT f.favorite_id)::int as favorites_count,
+        ${requestingUserId ? `EXISTS(SELECT 1 FROM nft_favorites f2 WHERE f2.nft_id = n.nft_id AND f2.user_id = '${requestingUserId}')` : 'false'} as is_favorited
+      FROM nfts n
+      LEFT JOIN users creator ON n.creator_id = creator.user_id
+      LEFT JOIN users owner ON n.current_owner_id = owner.user_id
+      LEFT JOIN collections c ON n.collection_id = c.collection_id
+      LEFT JOIN nft_favorites f ON n.nft_id = f.nft_id
+      WHERE n.nft_id::text = $1 OR n.token_id = $1
+      GROUP BY n.nft_id, creator.nickname, creator.first_name, creator.last_name, creator.avatar_url, owner.nickname, owner.first_name, owner.last_name, owner.avatar_url, c.name`,
       [nftId]
     );
 
@@ -573,51 +468,13 @@ router.get('/:nftId', async (req, res) => {
   }
 });
 
-// Atualizar/definir a coleção de um NFT
+// Atualizar/definir a coleção de um NFT - DESABILITADO
+// NFTs só podem ser associados a coleções no momento da criação
 router.patch('/:nftId/collection', async (req, res) => {
-  try {
-    const { nftId } = req.params;
-    const { collection_id } = req.body; // pode ser null para remover
-    const userId = getUserIdFromAuthHeader(req);
-
-    // Buscar NFT
-    const nftRes = await pool.query(
-      `SELECT nft_id, token_id, creator_id, current_owner_id
-       FROM nfts
-       WHERE nft_id::text = $1 OR token_id = $1
-       LIMIT 1`,
-      [String(nftId)]
-    );
-
-    if (nftRes.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'NFT não encontrado' });
-    }
-
-    const nft = nftRes.rows[0];
-
-    // Autorização básica: se houver userId, deve ser criador ou dono atual
-    if (userId && userId !== nft.creator_id && userId !== nft.current_owner_id) {
-      return res.status(403).json({ success: false, message: 'Sem permissão para alterar este NFT' });
-    }
-
-    // Validar collection opcionalmente (se fornecida)
-    if (collection_id) {
-      const colRes = await pool.query('SELECT 1 FROM collections WHERE collection_id = $1', [collection_id]);
-      if (colRes.rows.length === 0) {
-        return res.status(400).json({ success: false, message: 'Coleção inválida' });
-      }
-    }
-
-    const upd = await pool.query(
-      'UPDATE nfts SET collection_id = $1, updated_at = NOW() WHERE nft_id = $2 RETURNING *',
-      [collection_id || null, nft.nft_id]
-    );
-
-    return res.json({ success: true, message: 'Coleção atualizada', nft: upd.rows[0] });
-  } catch (error) {
-    console.error('Erro ao atualizar coleção do NFT:', error);
-    res.status(500).json({ success: false, message: 'Erro ao atualizar coleção', error: error.message });
-  }
+  return res.status(403).json({ 
+    success: false, 
+    message: 'NFTs só podem ser associados a coleções no momento da criação. A coleção não pode ser alterada posteriormente.' 
+  });
 });
 
 module.exports = router;

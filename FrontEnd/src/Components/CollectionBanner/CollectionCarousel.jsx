@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import styled from 'styled-components';
+import { useNavigate } from 'react-router-dom';
 import { API_BASE } from '../../config/api';
 
 const CarouselWrap = styled.div`
@@ -13,6 +14,12 @@ const Track = styled.div`
 
 const Slide = styled.div`
   position: relative; flex: 0 0 100%; height: 100%;
+  cursor: pointer;
+  transition: opacity 0.3s ease;
+  
+  &:hover {
+    opacity: 0.95;
+  }
 `;
 
 const Banner = styled.div`
@@ -104,7 +111,39 @@ const Dot = styled.button`
   }
 `;
 
+const TrendBox = styled.div`
+  position: absolute;
+  top: 16px; /* deslocado um pouco para baixo; mantém respiro até o badge */
+  right: 24px; /* mesmo right do badge para bordas alinhadas */
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 12px;
+  z-index: 4; /* acima do badge */
+  box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+`;
+
+const TrendLabel = styled.span`
+  font-size: 0.65rem;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.85);
+`;
+
+const TrendText = styled.span`
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: ${p => (p.$positive ? '#22c55e' : '#ef4444')};
+  opacity: .9;
+`;
+
 export default function CollectionCarousel(){
+  const navigate = useNavigate();
   const [items, setItems] = useState([]); // [{collection, previews}]
   const [idx, setIdx] = useState(0);
 
@@ -117,7 +156,14 @@ export default function CollectionCarousel(){
         if (!res.ok) throw new Error(data.message || 'Erro ao carregar destaques');
         const collections = data.collections || [];
         const previews = data.previews || {};
-        const normalized = collections.map(c => ({ collection: c, previews: previews[c.collection_id] || [] }));
+        const spark = data.spark || {};
+        const growth = data.growth || {};
+        const normalized = collections.map(c => ({ 
+          collection: c, 
+          previews: previews[c.collection_id] || [],
+          spark: spark[c.collection_id] || [],
+          growth: typeof growth[c.collection_id] === 'number' ? growth[c.collection_id] : null
+        }));
         if (!stop) setItems(normalized);
       } catch(e) { console.error(e); }
     }
@@ -134,14 +180,57 @@ export default function CollectionCarousel(){
 
   const go = (i) => setIdx(i);
 
+  const buildPath = (values = [], width = 120, height = 40) => {
+    if (!values || values.length === 0) return '';
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const span = Math.max(max - min, 1);
+    const stepX = width / Math.max(values.length - 1, 1);
+    return values.map((v, i) => {
+      const x = i * stepX;
+      const y = height - ((v - min) / span) * height; // invertido
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(' ');
+  };
+
   if (items.length === 0) return <CarouselWrap />;
 
   return (
     <CarouselWrap>
       <Track $index={idx}>
         {items.map((it) => (
-          <Slide key={it.collection.collection_id}>
+          <Slide key={it.collection.collection_id} onClick={() => navigate(`/collections/${it.collection.collection_id}`)}>
             <Banner $img={it.collection.banner_image} />
+            {it.collection.total_favorites > 0 && (
+              <FavoriteBadge>
+                <span>❤️</span> {it.collection.total_favorites}
+              </FavoriteBadge>
+            )}
+            {it.spark && it.spark.length > 1 && (
+              <TrendBox>
+                <TrendLabel>trend</TrendLabel>
+                <svg width="56" height="18" viewBox="0 0 56 18">
+                  <path 
+                    d={buildPath(it.spark, 56, 18)} 
+                    fill="none" 
+                    stroke={
+                      it.growth >= 40 ? '#10b981' :    // Verde escuro: crescimento máximo (≥40%)
+                      it.growth >= 20 ? '#22c55e' :    // Verde: crescimento alto
+                      it.growth >= 0 ? '#84cc16' :     // Verde claro: crescimento positivo
+                      it.growth >= -10 ? '#f59e0b' :   // Laranja: queda moderada
+                      '#ef4444'                         // Vermelho: queda acentuada
+                    }
+                    strokeWidth="1.6" 
+                    strokeLinecap="round" 
+                  />
+                </svg>
+                {typeof it.growth === 'number' && (
+                  <TrendText $positive={it.growth >= 0}>
+                    {it.growth >= 0 ? '↑ ' : '↓ '}{it.growth >= 0 ? '+' : ''}{it.growth.toFixed(1)}%
+                  </TrendText>
+                )}
+              </TrendBox>
+            )}
             <Gradient />
             <Content>
               <Info>
@@ -162,14 +251,22 @@ export default function CollectionCarousel(){
                   </StatItem>
                   <StatItem>
                     <span>LISTED</span>
-                    <b>1.2%</b>
+                    <b>{Number.parseFloat(it.collection.listed_percent || 0).toFixed(1)}%</b>
                   </StatItem>
                 </StatsBox>
               </Info>
             </Content>
             <RightThumbs>
               {it.previews.map(n => (
-                <Thumb key={n.nft_id}><img src={n.image_url} alt={n.name || 'nft'} /></Thumb>
+                <Thumb 
+                  key={n.nft_id} 
+                  onClick={(e) => {
+                    e.stopPropagation(); // Evita clicar no slide inteiro
+                    navigate(`/nft/${n.nft_id}`);
+                  }}
+                >
+                  <img src={n.image_url} alt={n.name || 'nft'} />
+                </Thumb>
               ))}
             </RightThumbs>
           </Slide>
@@ -183,3 +280,35 @@ export default function CollectionCarousel(){
     </CarouselWrap>
   )
 }
+
+const FavoriteBadge = styled.div`
+  position: absolute;
+  top: 50px; /* desce na mesma proporção do TrendBox para manter o respiro */
+  right: 24px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  z-index: 3;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    background: rgba(0, 0, 0, 0.65);
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(255, 75, 100, 0.3);
+  }
+  
+  span {
+    color: #ff4b64;
+    font-size: 1.1rem;
+  }
+`;
