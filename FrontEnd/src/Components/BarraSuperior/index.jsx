@@ -11,14 +11,15 @@ const BarraEstilizada = styled.header`
    left: 0;
    right: 0;
    height: 80px;
-   background-color: rgba(20, 20, 21, 1);
+   background-color: var(--bg-card, rgba(20, 20, 21, 1));
    display: flex;
    align-items: center;
    padding: 0;
    margin: 0;
-   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+   box-shadow: var(--shadow-md, 0 2px 5px rgba(0, 0, 0, 0.2));
    z-index: 1000;
    gap: 0;
+   border-bottom: 1px solid var(--border-primary, rgba(255, 255, 255, 0.1));
 `
 const Spacer = styled.div`
   flex-grow: 1;
@@ -39,7 +40,7 @@ const MenuButton = styled.button`
   .bar {
     width: 20px;
     height: 2px;
-    background-color: white;
+    background-color: var(--text-primary, white);
     position: relative;
     transition: width 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
     display: block;
@@ -89,9 +90,9 @@ const BalanceBadge = styled.div`
 `;
 
 const WalletButton = styled.button`
-  background-color: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: white;
+  background-color: var(--bg-hover, rgba(255, 255, 255, 0.1));
+  border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.2));
+  color: var(--text-primary, white);
   font-weight: 600;
   padding: 10px 16px;
   border-radius: 8px;
@@ -99,13 +100,13 @@ const WalletButton = styled.button`
   transition: background-color 0.2s;
   
   &:hover {
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: var(--bg-secondary, rgba(255, 255, 255, 0.2));
   }
 `;
 
 const CreateNFTButton = styled.button`
   background-color: #27ae60;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.2));
   color: white;
   font-weight: 600;
   padding: 10px 16px;
@@ -119,9 +120,9 @@ const CreateNFTButton = styled.button`
 `;
 
 const ProfileButton = styled.button`
-  background-color: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: white;
+  background-color: var(--bg-hover, rgba(255, 255, 255, 0.1));
+  border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.2));
+  color: var(--text-primary, white);
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -132,14 +133,14 @@ const ProfileButton = styled.button`
   justify-content: center;
   
   &:hover {
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: var(--bg-secondary, rgba(255, 255, 255, 0.2));
   }
 `;
 
 const AdminToggle = styled.button`
-  background: ${props => props.active ? '#9be3b8' : 'transparent'};
-  border: 1px solid rgba(255,255,255,0.08);
-  color: ${props => props.active ? 'rgba(0,0,0,0.8)' : 'white'};
+  background: ${props => props.active ? '#9be3b8' : 'var(--bg-hover, transparent)'};
+  border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
+  color: ${props => props.active ? 'rgba(0,0,0,0.8)' : 'var(--text-primary, white)'};
   padding: 6px 10px;
   border-radius: 8px;
   cursor: pointer;
@@ -212,9 +213,7 @@ const BarraSuperior = ({
           }}
         />
       </MenuButton>
-      <div style={{ marginLeft: -14 }}>
-        <Logo />
-      </div>
+      <Logo />
       <BarraDePesquisa />
       <Spacer /> 
       

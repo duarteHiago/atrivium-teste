@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import './App.css'
-import styled from 'styled-components'
+import styled, { createGlobalStyle } from 'styled-components'
+import { useTheme } from './contexts/ThemeContext'
 import BarraSuperior from './Components/BarraSuperior';
 import BarraLateral from './Components/BarraLateral';
 import Cms from './Components/Cms/Cms';
@@ -26,6 +27,15 @@ import FavoriteButton from './Components/FavoriteButton/FavoriteButton';
 import PublicProfile from './Components/User/PublicProfile';
 import { API_BASE } from './config/api';
 import Activity from './Components/Activity/Activity';
+
+// Global Styles for Theme
+const GlobalStyle = createGlobalStyle`
+  body {
+    background: ${props => props.theme.background.primary};
+    color: ${props => props.theme.text.primary};
+    transition: background 0.3s ease, color 0.3s ease;
+  }
+`;
 
 // 2. ATUALIZE OS ESTILOS PARA O EFEITO DE BLUR
 // Adiciona 'filter' e 'transition' quando um modal está aberto
@@ -188,6 +198,8 @@ const PlaceholderText = styled.div`
 
 
 function App() {
+
+  const { theme } = useTheme();
 
   // --- NOVOS ESTADOS GLOBAIS ---
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -363,6 +375,8 @@ function App() {
 
   return (
     <>
+      <GlobalStyle theme={theme} />
+      
       {/* 3. Renderiza os Modais (eles ficam escondidos por padrão) */}
       <Modal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)}> {/* ADICIONE ESTE BLOCO */}
         <AuthModal onAuthSuccess={handleLoginSuccess} />

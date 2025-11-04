@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import CollectionModal from '../CollectionModal/CollectionModal';
 import FavoriteButton from '../FavoriteButton/FavoriteButton';
 import { API_BASE } from '../../config/api';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const Container = styled.div`
   max-width: 1200px;
@@ -21,7 +22,7 @@ const Title = styled.h2`
 `;
 
 const Subtitle = styled.p`
-  color: rgba(255, 255, 255, 0.6);
+  color: ${props => props.theme.text.secondary};
   margin-bottom: 30px;
 `;
 
@@ -189,6 +190,7 @@ const FloatingButton = styled.button`
 
 function NftGallery() {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const [nfts, setNfts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -269,7 +271,7 @@ function NftGallery() {
   return (
     <Container>
       <Title>🖼️ Minha Galeria</Title>
-      <Subtitle>
+      <Subtitle theme={theme}>
         {nfts.length} NFT{nfts.length !== 1 ? 's' : ''} que você possui
       </Subtitle>
 

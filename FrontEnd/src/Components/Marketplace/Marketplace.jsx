@@ -203,6 +203,26 @@ const ForSaleBadge = styled.div`
   box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
 `;
 
+const OwnerBadge = styled.div`
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 6px 12px;
+  background: rgba(102, 126, 234, 0.95);
+  backdrop-filter: blur(8px);
+  border-radius: 20px;
+  font-size: 0.75em;
+  font-weight: 700;
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+`;
+
 const PopularityBadge = styled.div`
   position: absolute;
   top: 12px;
@@ -464,6 +484,8 @@ function Marketplace() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('recent');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [ownershipFilter, setOwnershipFilter] = useState('all'); // 'all', 'mine', 'available'
+  const [currentUserId, setCurrentUserId] = useState(null);
   const [trendData, setTrendData] = useState({}); // { nft_id: { spark, growth } }
   const [popularityData, setPopularityData] = useState({}); // { nft_id: { level, icon, label, recentFavorites } }
   const [suggestedData, setSuggestedData] = useState({}); // { nft_id: { suggestedPrice, breakdown } }
@@ -497,6 +519,11 @@ function Marketplace() {
     async function loadNfts() {
       try {
         setLoading(true);
+        
+        // Pega o ID do usuário logado
+        const userId = localStorage.getItem('creatorId');
+        setCurrentUserId(userId);
+        
         const res = await fetch(`${API_BASE}/api/leonardo/list`);
         const data = await res.json();
         
@@ -569,6 +596,15 @@ function Marketplace() {
     function applyFilters() {
       let filtered = [...nfts];
 
+      // Filtro de propriedade (novo)
+      if (ownershipFilter === 'mine') {
+        // Mostra apenas NFTs do usuário
+        filtered = filtered.filter(nft => nft.current_owner_id === currentUserId);
+      } else if (ownershipFilter === 'available') {
+        // Mostra apenas NFTs que NÃO são do usuário (disponíveis para compra)
+        filtered = filtered.filter(nft => nft.current_owner_id !== currentUserId);
+      }
+
       // Filtro de status
       if (statusFilter === 'sale') {
         filtered = filtered.filter(nft => nft.status === 'for_sale');
@@ -616,7 +652,7 @@ function Marketplace() {
     }
 
     applyFilters();
-  }, [nfts, searchTerm, sortBy, statusFilter, trendData, popularityData]);
+  }, [nfts, searchTerm, sortBy, statusFilter, ownershipFilter, currentUserId, trendData, popularityData]);
 
   const totalItems = nfts.length;
   const forSale = nfts.filter(n => n.status === 'for_sale').length;
@@ -662,6 +698,12 @@ function Marketplace() {
           onChange={(e) => setSearchTerm(e.target.value)}
         />
         
+        <Select value={ownershipFilter} onChange={(e) => setOwnershipFilter(e.target.value)}>
+          <option value="all">Todos os NFTs</option>
+          <option value="available">🛒 Disponíveis para comprar</option>
+          <option value="mine">👤 Meus NFTs</option>
+        </Select>
+        
         <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="all">Todos os status</option>
           <option value="sale">À venda</option>
@@ -689,6 +731,7 @@ function Marketplace() {
       ) : (
         <Grid>
           {filteredNfts.map(nft => {
+            const isMyNft = nft.current_owner_id === currentUserId;
             const popularity = popularityData[nft.nft_id]; // Usa dados dinâmicos da API
             const basePrice = parseFloat(nft.price) || 0.1; // Preço base de demonstração
             const suggestedPrice = suggestedData[nft.nft_id]?.suggestedPrice ?? calculateSuggestedPrice(basePrice, nft.favorites_count);
@@ -730,7 +773,14 @@ function Marketplace() {
                       )}
                     </TrendBadge>
                   )}
-                  {(nft.status === 'for_sale' || nft.status === 'listed') && <ForSaleBadge>À Venda</ForSaleBadge>}
+                  {isMyNft ? (
+                    <OwnerBadge>
+                      <span>👤</span>
+                      <span>Meu NFT</span>
+                    </OwnerBadge>
+                  ) : (
+                    (nft.status === 'for_sale' || nft.status === 'listed') && <ForSaleBadge>À Venda</ForSaleBadge>
+                  )}
                 </ImageWrapper>
                 
                 <CardInfo>

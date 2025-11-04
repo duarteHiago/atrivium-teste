@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE } from '../../config/api';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const Container = styled.div`
   max-width: 1200px;
   margin: 24px auto;
   padding: 20px;
-  color: #fff;
+  color: ${props => props.theme.text.primary};
 `;
 
 const Title = styled.h1`
@@ -21,7 +22,7 @@ const Title = styled.h1`
 
 const Subtitle = styled.p`
   margin: 0 0 30px 0;
-  color: rgba(255,255,255,0.6);
+  color: ${props => props.theme.text.secondary};
 `;
 
 const Grid = styled.div`
@@ -31,16 +32,16 @@ const Grid = styled.div`
 `;
 
 const Card = styled.div`
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid ${props => props.theme.mode === 'light' ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.15)'};
   border-radius: 12px;
   overflow: hidden;
-  background: rgba(30, 30, 31, 0.8);
+  background: ${props => props.theme.mode === 'light' ? '#f8f9fa' : 'rgba(30, 30, 31, 0.8)'};
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   cursor: pointer;
 
   &:hover {
     transform: translateY(-5px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 8px 20px ${props => props.theme.mode === 'light' ? 'rgba(0, 0, 0, 0.1)' : 'rgba(0, 0, 0, 0.3)'};
   }
 `;
 
@@ -59,13 +60,13 @@ const CardTitle = styled.h3`
   margin: 0 0 8px 0;
   font-size: 1.1em;
   font-weight: 600;
-  color: white;
+  color: ${props => props.theme.text.primary};
 `;
 
 const CardDescription = styled.p`
   margin: 0;
   font-size: 0.9em;
-  color: rgba(255, 255, 255, 0.6);
+  color: ${props => props.theme.text.secondary};
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
@@ -74,7 +75,7 @@ const CardDescription = styled.p`
 `;
 
 const Message = styled.p`
-  color: ${p => p.error ? '#ff6b6b' : 'rgba(255,255,255,0.7)'};
+  color: ${p => p.error ? '#ff6b6b' : p.theme.text.secondary};
   text-align: center;
   padding: 40px 20px;
 `;
@@ -92,6 +93,7 @@ const Badge = styled.span`
 
 export default function Gallery() {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const [nfts, setNfts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -125,16 +127,16 @@ export default function Gallery() {
     load();
   }, [token]);
 
-  if (loading) return <Container><Message>Carregando galeria...</Message></Container>;
-  if (error) return <Container><Message error>{error}</Message></Container>;
+  if (loading) return <Container theme={theme}><Message theme={theme}>Carregando galeria...</Message></Container>;
+  if (error) return <Container theme={theme}><Message theme={theme} error>{error}</Message></Container>;
 
   return (
-    <Container>
+    <Container theme={theme}>
       <Title>🖼️ Minha Galeria</Title>
-      <Subtitle>Seus NFTs criados e em propriedade</Subtitle>
+      <Subtitle theme={theme}>Seus NFTs criados e em propriedade</Subtitle>
 
       {nfts.length === 0 ? (
-        <Message>Você ainda não possui NFTs. Crie seu primeiro NFT agora!</Message>
+        <Message theme={theme}>Você ainda não possui NFTs. Crie seu primeiro NFT agora!</Message>
       ) : (
         <Grid>
           {nfts.map(nft => {
@@ -143,11 +145,11 @@ export default function Gallery() {
             const isOwner = nft.current_owner_id === userId;
 
             return (
-              <Card key={nft.nft_id} onClick={() => navigate(`/nft/${nft.nft_id}`)}>
+              <Card theme={theme} key={nft.nft_id} onClick={() => navigate(`/nft/${nft.nft_id}`)}>
                 <CardImg src={nft.image_url} alt={nft.name || 'NFT'} />
                 <CardBody>
-                  <CardTitle>{nft.name || 'NFT sem nome'}</CardTitle>
-                  <CardDescription>
+                  <CardTitle theme={theme}>{nft.name || 'NFT sem nome'}</CardTitle>
+                  <CardDescription theme={theme}>
                     {nft.description || nft.prompt || 'Gerado com IA'}
                   </CardDescription>
                   <div style={{ marginTop: 8 }}>

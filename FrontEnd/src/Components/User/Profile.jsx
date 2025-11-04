@@ -5,11 +5,12 @@ import { useNavigate } from 'react-router-dom';
 import Modal from '../Modal/Modal';
 import EditProfileModal from './EditProfileModal';
 import FavoriteButton from '../FavoriteButton/FavoriteButton';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const Container = styled.div`
   max-width: 1100px;
   margin: 24px auto;
-  color: #fff;
+  color: ${props => props.theme.text.primary};
   background: ${p => p.$bgColor || 'none'};
   border-radius: 16px;
 `;
@@ -26,16 +27,18 @@ const EditOverlayBtn = styled.button`
   position: absolute;
   right: 16px;
   bottom: 16px;
-  background: rgba(0,0,0,0.35);
-  color: #fff;
-  border: 1px solid rgba(255,255,255,0.2);
+  background: ${props => props.theme.mode === 'light' ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.35)'};
+  color: ${props => props.theme.mode === 'light' ? props.theme.text.primary : '#fff'};
+  border: 1px solid ${props => props.theme.border.primary};
   border-radius: 10px;
   padding: 10px 14px;
   cursor: pointer;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   transition: background .2s ease, transform .1s ease;
-  &:hover { background: rgba(0,0,0,0.5); }
+  &:hover { 
+    background: ${props => props.theme.mode === 'light' ? 'rgba(255,255,255,0.95)' : 'rgba(0,0,0,0.5)'};
+  }
   &:active { transform: translateY(1px); }
 `;
 
@@ -44,9 +47,11 @@ const AvatarWrap = styled.div`
 `;
 
 const Avatar = styled.div`
-  width: 140px; height: 140px; border-radius: 50%; overflow: hidden; border: 4px solid #1e1e1f;
-  position: relative; top: -70px; margin-left: 24px; box-shadow: 0 8px 24px rgba(0,0,0,.35);
-  background: rgba(255,255,255,0.06);
+  width: 140px; height: 140px; border-radius: 50%; overflow: hidden; 
+  border: 4px solid ${props => props.theme.background.primary};
+  position: relative; top: -70px; margin-left: 24px; 
+  box-shadow: ${props => props.theme.shadow.lg};
+  background: ${props => props.theme.background.hover};
   img { width: 100%; height: 100%; object-fit: cover; display: block; }
 `;
 
@@ -70,10 +75,12 @@ const Info = styled.div`
 
 const Name = styled.h2`
   margin: 0; font-size: 1.8rem; line-height: 1.1;
+  color: ${props => props.theme.text.primary};
 `;
 
 const Nick = styled.div`
   opacity: .8;
+  color: ${props => props.theme.text.secondary};
 `;
 
 const Bio = styled.div`
@@ -81,6 +88,7 @@ const Bio = styled.div`
   margin-top: 32px;
   opacity: .9;
   max-width: 720px;
+  color: ${props => props.theme.text.secondary};
 `;
 
 /* Botão antigo removido do header; agora usamos o EditOverlayBtn sobre o banner */
@@ -103,13 +111,13 @@ const Stats = styled.div`
 `;
 
 const Stat = styled.div`
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: ${props => props.theme.mode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.06)'};
+  border: 1px solid ${props => props.theme.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)'};
   border-radius: 10px;
   padding: 8px 10px;
   min-width: 100px;
-  span { display:block; font-size: .72rem; opacity: .8 }
-  b { display:block; font-size: 1rem; }
+  span { display:block; font-size: .72rem; color: ${props => props.theme.text.primary}; }
+  b { display:block; font-size: 1rem; color: ${props => props.theme.text.primary}; }
 `;
 
 const Message = styled.p`
@@ -126,7 +134,7 @@ const NftGrid = styled.div`
 `;
 
 const Card = styled.div`
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid ${props => props.theme.mode === 'light' ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.15)'};
   border-radius: 12px;
   overflow: hidden;
   background: rgba(30, 30, 31, 1);
@@ -180,6 +188,15 @@ const CardImg = styled.img`
 
 const CardBody = styled.div`
   padding: 10px;
+  color: #ffffff;
+  
+  div:first-child {
+    color: #ffffff;
+  }
+  
+  span {
+    color: rgba(255, 255, 255, 0.9);
+  }
 `;
 
 const CardFooter = styled.div`
@@ -188,11 +205,16 @@ const CardFooter = styled.div`
   align-items: center;
   padding: 10px 10px 10px 10px; /* padding-top aumentado para dar respiro da linha */
   margin-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid ${props => props.theme.mode === 'light' ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.08)'};
+  
+  div {
+    color: rgba(255, 255, 255, 0.9);
+  }
 `;
 
 export default function Profile({ onRequireLogin }) {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -258,41 +280,41 @@ export default function Profile({ onRequireLogin }) {
     bgColor = '#18181a';
   }
 
-  if (loading) return <Container $bgColor={bgColor}><p>Carregando...</p></Container>;
+  if (loading) return <Container theme={theme} $bgColor={bgColor}><p>Carregando...</p></Container>;
 
   return (
     <>
-  <Container $bgColor={bgColor}>
+  <Container theme={theme} $bgColor={bgColor}>
       {error && <Message error>{error}</Message>}
 
       {user && (
         <>
           <Banner $img={user.banner_url}>
-            <EditOverlayBtn onClick={() => setIsEditOpen(true)}>Editar Perfil</EditOverlayBtn>
+            <EditOverlayBtn theme={theme} onClick={() => setIsEditOpen(true)}>Editar Perfil</EditOverlayBtn>
           </Banner>
           <AvatarWrap>
-            <Avatar>
+            <Avatar theme={theme}>
               {user.avatar_url ? <img src={user.avatar_url} alt="Avatar" /> : null}
             </Avatar>
           </AvatarWrap>
           {/* Stats agora ficam logo abaixo do banner, alinhados à direita */}
           <Stats>
-            <Stat><span>NFTs criados</span><b>{profile?.stats?.created ?? created.length}</b></Stat>
-            <Stat><span>NFTs em propriedade</span><b>{profile?.stats?.owned ?? owned.length}</b></Stat>
-            <Stat><span>Coleções</span><b>{profile?.stats?.collections ?? 0}</b></Stat>
-            <Stat><span>Transações</span><b>{profile?.stats?.transactions ?? 0}</b></Stat>
+            <Stat theme={theme}><span>NFTs criados</span><b>{profile?.stats?.created ?? created.length}</b></Stat>
+            <Stat theme={theme}><span>NFTs em propriedade</span><b>{profile?.stats?.owned ?? owned.length}</b></Stat>
+            <Stat theme={theme}><span>Coleções</span><b>{profile?.stats?.collections ?? 0}</b></Stat>
+            <Stat theme={theme}><span>Transações</span><b>{profile?.stats?.transactions ?? 0}</b></Stat>
           </Stats>
           <Header>
             <Info>
-              <Name>{user.first_name} {user.last_name}</Name>
-              <Nick>{user.nickname ? `@${user.nickname.replace(/^@/, '')}` : user.email}</Nick>
+              <Name theme={theme}>{user.first_name} {user.last_name}</Name>
+              <Nick theme={theme}>{user.nickname ? `@${user.nickname.replace(/^@/, '')}` : user.email}</Nick>
             </Info>
           </Header>
 
 
 
           {user.bio && (
-            <Bio>
+            <Bio theme={theme}>
               {user.bio.length > 60
                 ? user.bio.slice(0, 60) + '...'
                 : user.bio}
@@ -304,7 +326,7 @@ export default function Profile({ onRequireLogin }) {
             {collections.length === 0 ? <p>Nenhuma coleção criada ainda.</p> : (
               <NftGrid>
                 {collections.map(c => (
-                  <Card key={c.collection_id} onClick={() => navigate(`/collections/${c.collection_id}`)}>
+                  <Card theme={theme} key={c.collection_id} onClick={() => navigate(`/collections/${c.collection_id}`)}>
                     <CardImg src={c.banner_url || '/default-collection.png'} alt={c.name} />
                     <CardBody>
                       <div style={{fontWeight:600}}>{c.name}</div>
@@ -328,13 +350,13 @@ export default function Profile({ onRequireLogin }) {
             {created.length === 0 ? <p>Nenhum NFT criado ainda.</p> : (
               <NftGrid>
                 {created.map(n => (
-                  <Card key={n.nft_id} onClick={() => navigate(`/nft/${n.nft_id}`)}>
+                  <Card theme={theme} key={n.nft_id} onClick={() => navigate(`/nft/${n.nft_id}`)}>
                     <CardImg src={n.image_url} alt={n.name || 'NFT'} />
                     <CardBody>
                       <div style={{fontWeight:600}}>{n.name || 'Sem nome'}</div>
                       <div style={{opacity:0.8, fontSize:'0.9rem'}}>{n.description || n.prompt || ''}</div>
                     </CardBody>
-                    <CardFooter>
+                    <CardFooter theme={theme}>
                       <div style={{fontSize:'0.85rem', opacity:0.7}}>
                         {new Date(n.created_at).toLocaleDateString('pt-BR')}
                       </div>
@@ -359,13 +381,13 @@ export default function Profile({ onRequireLogin }) {
             {owned.length === 0 ? <p>Nenhum NFT em propriedade.</p> : (
               <NftGrid>
                 {owned.map(n => (
-                  <Card key={n.nft_id} onClick={() => navigate(`/nft/${n.nft_id}`)}>
+                  <Card theme={theme} key={n.nft_id} onClick={() => navigate(`/nft/${n.nft_id}`)}>
                     <CardImg src={n.image_url} alt={n.name || 'NFT'} />
                     <CardBody>
                       <div style={{fontWeight:600}}>{n.name || 'Sem nome'}</div>
                       <div style={{opacity:0.8, fontSize:'0.9rem'}}>{n.description || n.prompt || ''}</div>
                     </CardBody>
-                    <CardFooter>
+                    <CardFooter theme={theme}>
                       <div style={{fontSize:'0.85rem', opacity:0.7}}>
                         {new Date(n.created_at).toLocaleDateString('pt-BR')}
                       </div>
