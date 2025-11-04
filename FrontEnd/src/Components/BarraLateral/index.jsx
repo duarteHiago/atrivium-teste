@@ -118,6 +118,14 @@ const BarraLateral = ({ $isOpen, sidebarRef, onOpenCms, isAdmin = false, onGoHom
         >
           Activity
         </MenuItem>
+        {isAdmin && (
+          <MenuItem
+            as="button"
+            onClick={() => { try { window.location.hash = ''; } catch { /* ignore */ } window.history.pushState({}, '', '/ipfs'); window.dispatchEvent(new PopStateEvent('popstate')); }}
+          >
+            🌐 IPFS Manager
+          </MenuItem>
+        )}
   <MenuItem as="button" onClick={() => { try { window.location.hash = ''; } catch { /* ignore */ } window.history.pushState({}, '', '/profile'); window.dispatchEvent(new PopStateEvent('popstate')); }}>Profile</MenuItem>
       </MenuList>
 

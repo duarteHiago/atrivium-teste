@@ -82,6 +82,46 @@ router.get('/url/:hash', (req, res) => {
     });
 });
 
+/**
+ * Remove um arquivo do Pinata (unpin)
+ * DELETE /api/ipfs/unpin/:hash
+ */
+router.delete('/unpin/:hash', async (req, res) => {
+    try {
+        if (!ipfsService.isConfigured()) {
+            return res.status(503).json({
+                success: false,
+                message: 'IPFS não configurado'
+            });
+        }
+
+        const { hash } = req.params;
+        
+        if (!hash || hash.length < 10) {
+            return res.status(400).json({
+                success: false,
+                message: 'Hash IPFS inválido'
+            });
+        }
+
+        const result = await ipfsService.unpinFile(hash);
+
+        res.json({
+            success: true,
+            message: `Arquivo ${hash} removido com sucesso`,
+            data: result
+        });
+
+    } catch (error) {
+        console.error('Erro ao remover arquivo:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao remover arquivo',
+            error: error.message
+        });
+    }
+});
+
 module.exports = router;
 
 /**

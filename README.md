@@ -33,6 +33,7 @@ O projeto está em desenvolvimento ativo e organizado em fases:
 -   [x] **Fase 4: Integração com IA** - Sistema de geração de imagens com Leonardo AI e HuggingFace.
 -   [x] **Fase 5: Tokenização** - Sistema de tokenização única com hash SHA-256 e certificados digitais.
 -   [x] **Fase 6: Armazenamento IPFS** - Integração com Pinata para armazenamento descentralizado de imagens NFT.
+-   [x] **Fase 6.1: Sistema de Administração IPFS** - Controle de acesso administrativo para IPFS Manager e sincronização automática de imagens Pinata.
 -   [ ] **Fase 7: Integração com Blockchain** - Implementação de smart contracts e minting (Planejado).
 
 ## 4. Arquitetura Planejada
@@ -148,7 +149,11 @@ cd ../config/environments
 cp .env.example .env.development
 
 # Edite .env.development com suas credenciais
-# Especialmente: LEONARDO_API_KEY ou HUGGINGFACE_API_KEY
+# APIs necessárias:
+# LEONARDO_API_KEY=sua_chave_leonardo_aqui
+# HUGGINGFACE_API_KEY=sua_chave_huggingface_aqui  
+# PINATA_API_KEY=sua_chave_pinata_aqui
+# PINATA_SECRET_API_KEY=sua_chave_secreta_pinata_aqui
 ```
 
 #### 4. Iniciar o Backend (Node.js)
@@ -205,7 +210,36 @@ atrivium-teste/
     └── archived/          # Documentação histórica
 ```
 
-## 8. Troubleshooting (Solução de Problemas)
+## 8. Funcionalidades Implementadas
+
+### 🔐 Sistema de Administração e IPFS
+
+#### Controle de Acesso Administrativo
+- **IPFS Manager restrito a Admins**: O menu "IPFS Manager" no sidebar só aparece para usuários com role de admin
+- **Indicador de Status Pinata**: Botão de teste IPFS disponível apenas para admins na barra superior
+- **Sincronização Automática**: Sistema de sync entre Pinata e banco de dados local
+
+#### Integração IPFS/Pinata
+- **CID como Token ID**: NFTs do IPFS usam o CID (Content Identifier) como token_id
+- **Metadata ERC-721**: Estrutura de metadata compatível com padrão ERC-721
+- **Gateway Descentralizado**: Imagens acessíveis via gateway Pinata
+- **Identificação Visual**: NFTs do IPFS têm badge 🌐 na interface
+
+#### Arquivos Modificados (04/11/2025)
+- `FrontEnd/src/Components/BarraSuperior/index.jsx`: Adicionado controle admin e testes IPFS
+- `FrontEnd/src/Components/BarraLateral/index.jsx`: IPFS Manager restrito a admins  
+- `BackEnd/src/services/pinataSync.service.js`: Serviço de sincronização Pinata
+- `BackEnd/src/routes/pinataSync.routes.js`: Endpoints de sincronização
+- `BackEnd/src/routes/testNft.routes.js`: Endpoints de teste IPFS com CID como token
+- `FrontEnd/src/services/nftMerged.service.js`: Serviço para mesclar NFTs locais e IPFS
+
+### 🧪 Endpoints de Teste (Desenvolvimento)
+- `GET /api/test/create-ipfs-nft`: Criar NFT de teste do IPFS
+- `GET /api/test/simple-nfts`: Listar NFTs simplificado
+- `GET /api/test/check-ipfs-nfts`: Verificar NFTs IPFS
+- `POST /api/pinata-sync/sync`: Sincronizar imagens do Pinata (Admin apenas)
+
+## 9. Troubleshooting (Solução de Problemas)
 
 * **Problemas com `npm` no PowerShell (ExecutionPolicy):**
     * Se o PowerShell bloquear scripts `npm`, reabra o terminal como **Administrador** e execute:

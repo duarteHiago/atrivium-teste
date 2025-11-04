@@ -26,6 +26,10 @@ import FavoriteButton from './Components/FavoriteButton/FavoriteButton';
 import PublicProfile from './Components/User/PublicProfile';
 import { API_BASE } from './config/api';
 import Activity from './Components/Activity/Activity';
+import IPFSManager from './Pages/IPFSManager';
+import usePinataAutoInit from './hooks/usePinataAutoInit';
+import NFTMergedService from './services/nftMerged.service';
+import Badge from './Components/Badge';
 
 // 2. ATUALIZE OS ESTILOS PARA O EFEITO DE BLUR
 // Adiciona 'filter' e 'transition' quando um modal está aberto
@@ -188,6 +192,8 @@ const PlaceholderText = styled.div`
 
 
 function App() {
+  // Inicializa sincronização automática do Pinata
+  usePinataAutoInit();
 
   // --- NOVOS ESTADOS GLOBAIS ---
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -330,18 +336,24 @@ function App() {
     checkAuth();
   }, []);
 
-  // Buscar NFTs recentes do backend
+  // Buscar NFTs recentes mesclados (regulares + Pinata)
   useEffect(() => {
     const fetchRecentNfts = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/leonardo/list`);
-        const data = await response.json();
-        if (data.success) {
-          // Pegar apenas os 5 mais recentes
-          setRecentNfts(data.nfts.slice(0, 5));
-        }
+        const mergedNfts = await NFTMergedService.getRecentNFTs(8); // 8 NFTs para ter mais variedade
+        setRecentNfts(mergedNfts.slice(0, 5)); // Mostrar apenas 5 na tela
       } catch (error) {
-        console.error('Erro ao buscar NFTs recentes:', error);
+        console.error('Erro ao buscar NFTs recentes mesclados:', error);
+        // Fallback para método antigo
+        try {
+          const response = await fetch(`${API_BASE}/api/leonardo/list`);
+          const data = await response.json();
+          if (data.success) {
+            setRecentNfts(data.nfts.slice(0, 5));
+          }
+        } catch (fallbackError) {
+          console.error('Erro no fallback:', fallbackError);
+        }
       } finally {
         setLoadingNfts(false);
       }
@@ -423,6 +435,11 @@ function App() {
                 <Activity />
               </ProtectedRoute>
             } />
+            <Route path="/ipfs" element={
+              <ProtectedRoute requireAuth={true} onRequireLogin={() => setIsLoginModalOpen(true)}>
+                <IPFSManager />
+              </ProtectedRoute>
+            } />
             <Route path="/collections/:id" element={<CollectionDetail />} />
             <Route path="/nft/:id" element={<NftDetail />} />
             <Route path="/" element={(
@@ -454,6 +471,7 @@ function App() {
                           if (e.target.closest('button')) return;
                           navigate(`/nft/${nft.nft_id}`);
                         }}>
+                          {nft.isIPFS && <Badge variant="ipfs">IPFS</Badge>}
                           <CardImage src={nft.image_url} alt={nft.name || 'NFT'} />
                           <CardInfo>
                             <CardTitle>{nft.name || 'NFT sem nome'}</CardTitle>
@@ -492,6 +510,7 @@ function App() {
                     )}
                   </CardRow>
                 </Section>
+                
                 <Section>
                   <SectionTitle>Trending Tokens</SectionTitle>
                    <CardRow>

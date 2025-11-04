@@ -26,6 +26,8 @@ const leonardoRoutes = require('./src/routes/leonardo.routes'); // Rotas da API 
 const collectionRoutes = require('./src/routes/collection.routes'); // Rotas de Coleções
 const ipfsRoutes = require('./src/routes/ipfs.routes'); // Rotas de IPFS/Pinata
 const walletRoutes = require('./src/routes/wallet.routes'); // Rotas de Carteira
+const pinataSyncRoutes = require('./src/routes/pinataSync.routes'); // Rotas de sincronização Pinata
+const testNftRoutes = require('./src/routes/testNft.routes'); // Rotas de teste NFT
 
 // Middlewares
 app.use(cors()); // Permite requisições do frontend
@@ -43,11 +45,10 @@ app.use('/api/ipfs', ipfsRoutes); // Rotas de IPFS/Pinata
 console.log('✅ Rotas IPFS registradas');
 app.use('/api/wallet', walletRoutes); // Rotas de Carteira
 console.log('✅ Rotas de Carteira registradas');
-
-// Rota de teste simples
-app.get('/api/test', (req, res) => {
-  res.json({ message: 'Servidor funcionando!' });
-});
+app.use('/api/pinata-sync', pinataSyncRoutes); // Rotas de sincronização Pinata
+console.log('✅ Rotas de sincronização Pinata registradas');
+app.use('/api/test', testNftRoutes); // Rotas de teste NFT
+console.log('✅ Rotas de teste NFT registradas');
 
 // Configuração da Conexão com o Banco de Dados (lê do .env)
 const pool = new Pool({

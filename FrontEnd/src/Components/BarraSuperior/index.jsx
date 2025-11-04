@@ -3,7 +3,10 @@ import styled from 'styled-components'
 import { useNavigate } from 'react-router-dom'
 import Logo from './Logo'
 import BarraDePesquisa from './BarraDePesquisa'
+import PinataIndicator from '../PinataIndicator'
+import IPFSManager from '../IPFSManager'
 import { API_BASE } from '../../config/api'
+// Removido import do usuarioIcon - agora usando componente SVG inline
 
 const BarraEstilizada = styled.header`
    position: fixed;
@@ -19,9 +22,12 @@ const BarraEstilizada = styled.header`
    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
    z-index: 1000;
    gap: 0;
+   overflow: visible; /* Permite que o efeito de hover se expanda */
 `
 const Spacer = styled.div`
   flex-grow: 1;
+  display: flex;
+  align-items: center;
 `
 
 const MenuButton = styled.button`
@@ -29,7 +35,7 @@ const MenuButton = styled.button`
   border: none;
   cursor: pointer;
   width: 48px;
-  height: 44px;
+  height: 48px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -122,18 +128,30 @@ const ProfileButton = styled.button`
   background-color: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: white;
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   cursor: pointer;
   font-size: 1.2rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s ease;
   
   &:hover {
     background-color: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
   }
+`;
+
+const UserIcon = styled.svg`
+  width: 22px;
+  height: 22px;
+  color: white;
+  stroke: white;
+  fill: white;
+  opacity: 1;
+  flex-shrink: 0;
 `;
 
 const AdminToggle = styled.button`
@@ -160,6 +178,7 @@ const BarraSuperior = ({
   
   const [hovered, setHovered] = useState(false);
   const [balance, setBalance] = useState(null);
+  const [ipfsModalOpen, setIpfsModalOpen] = useState(false);
   const navigate = useNavigate();
   
   useEffect(() => {
@@ -212,13 +231,51 @@ const BarraSuperior = ({
           }}
         />
       </MenuButton>
-      <div style={{ marginLeft: -14 }}>
+      <div style={{ marginLeft: -8, position: 'relative', zIndex: 10, display: 'flex', alignItems: 'center', height: '80px' }}>
         <Logo />
       </div>
       <BarraDePesquisa />
       <Spacer /> 
       
       <HeaderButtonGroup>
+        {isAdmin && <PinataIndicator onClick={() => setIpfsModalOpen(true)} />}
+        {isAdmin && (
+          <button 
+            style={{ padding: '8px', background: '#ff6b6b', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+            onClick={async () => {
+              try {
+                console.log('🔄 Criando NFT de teste...');
+                const response = await fetch('http://localhost:3001/api/test/create-ipfs-nft', {
+                  method: 'GET'
+                });
+                
+                console.log('📡 Response status:', response.status);
+                console.log('📡 Response headers:', response.headers.get('content-type'));
+                
+                if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                  const text = await response.text();
+                  console.error('❌ Resposta não é JSON:', text);
+                  throw new Error('Servidor retornou resposta inválida');
+                }
+                
+                const data = await response.json();
+                console.log('✅ NFT teste criado:', data);
+                alert('NFT de teste criado com sucesso! Recarregando...');
+                setTimeout(() => window.location.reload(), 1000);
+              } catch (error) {
+                console.error('❌ Erro completo:', error);
+                alert('Erro ao criar NFT teste: ' + error.message);
+              }
+            }}
+          >
+            Teste IPFS
+          </button>
+        )}
         {balance !== null && (
           <BalanceBadge title="Seu saldo em carteira">
             <span>💰</span>
@@ -240,9 +297,20 @@ const BarraSuperior = ({
           Connect Wallet
         </WalletButton>
         <ProfileButton onClick={onProfileClick}>
-          {isLoggedIn ? '👤' : '🚪'} {/* Usa isLoggedIn */}
+          <UserIcon viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+            <circle cx="12" cy="9" r="2.5" fill="currentColor"/>
+            <path d="M7.5 18.5c0-2.5 2-4.5 4.5-4.5s4.5 2 4.5 4.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+          </UserIcon>
         </ProfileButton>
       </HeaderButtonGroup>
+      
+      {isAdmin && (
+        <IPFSManager 
+          isOpen={ipfsModalOpen} 
+          onClose={() => setIpfsModalOpen(false)} 
+        />
+      )}
     </BarraEstilizada>
   )
 }
