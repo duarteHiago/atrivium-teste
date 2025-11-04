@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import styled from 'styled-components';
-import { API_BASE } from '../../config/api';
+import { WORKER_BASE } from '../../config/api';
 
 const Container = styled.div`
   padding: 24px;
@@ -97,7 +97,7 @@ export default function Activity() {
       setError(null);
       try {
         const token = localStorage.getItem('token');
-        const r = await fetch(`${API_BASE}/api/users/me/activity?page=1&limit=50`, {
+        const r = await fetch(`${WORKER_BASE}/api/users/me/activity?page=1&limit=50`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await r.json();

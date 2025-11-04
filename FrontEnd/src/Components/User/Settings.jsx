@@ -1,6 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import styled from 'styled-components';
-import { API_BASE } from '../../config/api';
+import { WORKER_BASE } from '../../config/api';
+
+// Detecta se o "WORKER_BASE" está apontando para localhost (sem Worker ativo)
+const IS_LOCAL_MODE = typeof WORKER_BASE === 'string' && /localhost|127\.0\.0\.1/.test(WORKER_BASE);
 
 const Container = styled.div`
   max-width: 960px;
@@ -131,7 +134,7 @@ export default function Settings({ onRequireLogin }) {
     const load = async () => {
       setLoading(true); setError(''); setMessage('');
       try {
-        const r = await fetch(`${API_BASE}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
+        const r = await fetch(`${WORKER_BASE}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
         const d = await r.json();
         if (!r.ok) throw new Error(d.message || 'Falha ao carregar dados');
         setForm({
@@ -178,6 +181,7 @@ export default function Settings({ onRequireLogin }) {
   const onSave = async (e) => {
     e.preventDefault(); setSaving(true); setError(''); setMessage('');
     try {
+      // Se houver arquivos, subimos primeiro no Worker para obter URLs públicas
       const fd = new FormData();
       fd.append('first_name', form.first_name);
       fd.append('last_name', form.last_name);
@@ -186,10 +190,34 @@ export default function Settings({ onRequireLogin }) {
       if (form.cep) fd.append('cep', form.cep);
       if (form.address) fd.append('address', form.address);
       if (form.gender) fd.append('gender', form.gender);
-      if (avatarFile) fd.append('avatar', avatarFile);
-      if (bannerFile) fd.append('banner', bannerFile);
 
-      const r = await fetch(`${API_BASE}/api/users/me`, {
+      // Se estiver em modo local, enviamos os ARQUIVOS direto no PATCH (multer trata no backend)
+      // Caso contrário (produção/Worker), fazemos upload prévio para R2 e enviamos as URLs
+      if (IS_LOCAL_MODE) {
+        if (avatarFile) fd.append('avatar', avatarFile);
+        if (bannerFile) fd.append('banner', bannerFile);
+      } else {
+        async function uploadToWorker(file) {
+          const res = await fetch(`${WORKER_BASE}/api/upload`, {
+            method: 'POST',
+            headers: { 'content-type': file.type || 'application/octet-stream', 'x-filename': file.name || `file-${Date.now()}` },
+            body: file
+          });
+          const data = await res.json();
+          if (!res.ok || !data?.url) throw new Error(data?.error || 'Falha no upload');
+          return data.url;
+        }
+        if (avatarFile) {
+          const url = await uploadToWorker(avatarFile);
+          fd.append('avatar_url', url);
+        }
+        if (bannerFile) {
+          const url = await uploadToWorker(bannerFile);
+          fd.append('banner_url', url);
+        }
+      }
+
+      const r = await fetch(`${WORKER_BASE}/api/users/me`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` },
         body: fd

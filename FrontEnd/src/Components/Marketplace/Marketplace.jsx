@@ -599,10 +599,10 @@ function Marketplace() {
       // Filtro de propriedade (novo)
       if (ownershipFilter === 'mine') {
         // Mostra apenas NFTs do usuário
-        filtered = filtered.filter(nft => nft.current_owner_id === currentUserId);
+  filtered = filtered.filter(nft => (nft.current_owner_id || nft.owner_id) === currentUserId);
       } else if (ownershipFilter === 'available') {
         // Mostra apenas NFTs que NÃO são do usuário (disponíveis para compra)
-        filtered = filtered.filter(nft => nft.current_owner_id !== currentUserId);
+  filtered = filtered.filter(nft => (nft.current_owner_id || nft.owner_id) !== currentUserId);
       }
 
       // Filtro de status
@@ -731,7 +731,7 @@ function Marketplace() {
       ) : (
         <Grid>
           {filteredNfts.map(nft => {
-            const isMyNft = nft.current_owner_id === currentUserId;
+            const isMyNft = (nft.current_owner_id || nft.owner_id) === currentUserId;
             const popularity = popularityData[nft.nft_id]; // Usa dados dinâmicos da API
             const basePrice = parseFloat(nft.price) || 0.1; // Preço base de demonstração
             const suggestedPrice = suggestedData[nft.nft_id]?.suggestedPrice ?? calculateSuggestedPrice(basePrice, nft.favorites_count);
@@ -864,7 +864,8 @@ function Marketplace() {
                           ❤️ {nft.favorites_count}
                         </div>
                       )}
-                      {(nft.status === 'for_sale' || nft.status === 'listed') && (
+                      {/* Mostrar botão de compra APENAS se NÃO for meu NFT e estiver à venda */}
+                      {!isMyNft && (nft.status === 'for_sale' || nft.status === 'listed') && (
                         <BuyButton
                           onClick={(e) => {
                             e.stopPropagation();

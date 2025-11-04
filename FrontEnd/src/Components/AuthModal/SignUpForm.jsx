@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { API_BASE } from '../../config/api';
+import { WORKER_BASE } from '../../config/api';
 
 // Reutilizando estilos...
 const Form = styled.form`
@@ -110,7 +110,7 @@ const SignUpForm = ({ onAuthSuccess }) => {
     if (error) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/auth/register`, {
+      const res = await fetch(`${WORKER_BASE}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form)
@@ -118,7 +118,7 @@ const SignUpForm = ({ onAuthSuccess }) => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Falha no cadastro');
       // Auto-login após cadastro
-      const loginRes = await fetch(`${API_BASE}/api/auth/login`, {
+      const loginRes = await fetch(`${WORKER_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: form.email, password: form.password })

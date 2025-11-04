@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { API_BASE } from '../../config/api';
+import { WORKER_BASE } from '../../config/api';
 
 // Reutilizando alguns estilos do formulário de cadastro
 const Form = styled.form`
@@ -66,7 +66,7 @@ const LoginForm = ({ onAuthSuccess }) => {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
+      const res = await fetch(`${WORKER_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })

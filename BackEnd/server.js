@@ -100,6 +100,59 @@ pool.query('SELECT NOW()', (err, res) => {
   }
 })();
 
+// Seed: garante um usuário admin padrão em ambientes de dev/build
+async function ensureDefaultAdmin() {
+  try {
+    const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@example.com';
+    const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+    const ADMIN_FIRST = process.env.ADMIN_FIRST_NAME || 'Admin';
+    const ADMIN_LAST = process.env.ADMIN_LAST_NAME || 'User';
+    const ADMIN_BIRTH_DATE = process.env.ADMIN_BIRTH_DATE || '1990-01-01';
+    const RAW_ADMIN_CPF = (process.env.ADMIN_CPF || '').trim();
+
+    // Garante um CPF válido para o schema (NOT NULL) no seed do admin
+    let ADMIN_CPF;
+    if (RAW_ADMIN_CPF) {
+      // Aproveita a função de formatação já utilizada no cadastro
+      ADMIN_CPF = formatCPF(RAW_ADMIN_CPF);
+    } else {
+      // Gera um CPF placeholder único (apenas formato e unicidade no banco; não valida DV)
+      const digits = (Date.now().toString() + '00000000000').slice(0, 11);
+      ADMIN_CPF = formatCPF(digits);
+      console.log(`⚠️ ADMIN_CPF não informado; usando CPF gerado para seed: ${ADMIN_CPF}`);
+    }
+
+    // Verifica se já existe usuário com este email
+    const rs = await pool.query('SELECT user_id, role FROM users WHERE email = $1 LIMIT 1', [ADMIN_EMAIL]);
+    if (rs.rows.length > 0) {
+      // Se já existe, garante que role seja admin
+      if (rs.rows[0].role !== 'admin') {
+        await pool.query('UPDATE users SET role = $1 WHERE user_id = $2', ['admin', rs.rows[0].user_id]);
+        console.log(`👑 Promovido usuário existente a admin: ${ADMIN_EMAIL}`);
+      } else {
+        console.log(`✅ Admin padrão já existe: ${ADMIN_EMAIL}`);
+      }
+      return;
+    }
+
+    // Cria novo admin com senha hash
+    const saltRounds = 10;
+    const password_hash = await bcrypt.hash(ADMIN_PASSWORD, saltRounds);
+
+    await pool.query(
+      `INSERT INTO users (first_name, last_name, cpf, birth_date, email, password_hash, role)
+       VALUES ($1, $2, $3, $4, $5, $6, 'admin')`,
+      [ADMIN_FIRST, ADMIN_LAST, ADMIN_CPF, ADMIN_BIRTH_DATE, ADMIN_EMAIL, password_hash]
+    );
+    console.log(`✅ Admin padrão criado: ${ADMIN_EMAIL}`);
+  } catch (e) {
+    console.error('Erro ao garantir admin padrão:', e.message);
+  }
+}
+
+// Invoca seed de admin após inicialização do app
+ensureDefaultAdmin();
+
 
 // Armazena o pool no app para acesso nos controllers
 app.locals.pool = pool;
@@ -312,9 +365,13 @@ app.patch('/api/users/me', authMiddleware, upload.fields([
     if (typeof nickname === 'string')   { fields.push(`nickname = $${idx++}`); values.push(nickname); }
     if (typeof bio === 'string')        { fields.push(`bio = $${idx++}`); values.push(bio); }
 
-    // Processar uploads (avatar e banner) se enviados
+    // Processar URLs diretas (R2 via Worker) OU uploads locais
     const baseUrl = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
-    if (req.files?.avatar?.[0]?.buffer) {
+
+    // Se o frontend já subiu no Worker e enviou avatar_url/banner_url, priorize esses valores
+    if (req.body?.avatar_url) {
+      fields.push(`avatar_url = $${idx++}`); values.push(req.body.avatar_url);
+    } else if (req.files?.avatar?.[0]?.buffer) {
       const uploadDir = path.join(process.cwd(), 'uploads', 'users', 'avatars');
       ensureDir(uploadDir);
       const filename = `${userId}-avatar.webp`;
@@ -326,7 +383,10 @@ app.patch('/api/users/me', authMiddleware, upload.fields([
       const url = `${baseUrl}/uploads/users/avatars/${filename}`;
       fields.push(`avatar_url = $${idx++}`); values.push(url);
     }
-    if (req.files?.banner?.[0]?.buffer) {
+
+    if (req.body?.banner_url) {
+      fields.push(`banner_url = $${idx++}`); values.push(req.body.banner_url);
+    } else if (req.files?.banner?.[0]?.buffer) {
       const uploadDir = path.join(process.cwd(), 'uploads', 'users', 'banners');
       ensureDir(uploadDir);
       const filename = `${userId}-banner.webp`;

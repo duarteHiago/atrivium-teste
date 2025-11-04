@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { API_BASE } from '../../config/api';
+import { API_BASE, WORKER_BASE } from '../../config/api';
 
 const ModalOverlay = styled.div`
   position: fixed;
@@ -306,30 +306,23 @@ function CollectionModal({ isOpen, onClose, onSelect }) {
     setSuccess(false);
 
     try {
-      let body;
-      let headers;
+      let bannerUrl = formData.banner_image || '';
       if (bannerFile) {
-        const fd = new FormData();
-        fd.append('name', formData.name);
-        if (formData.description) fd.append('description', formData.description);
-        // Preferência pelo arquivo; se quiser permitir URL alternativa, envia também
-        if (formData.banner_image) fd.append('banner_image', formData.banner_image);
-        fd.append('banner', bannerFile);
-        body = fd;
-        headers = {
-          ...(typeof window !== 'undefined' && localStorage.getItem('token') ? { 'Authorization': `Bearer ${localStorage.getItem('token')}` } : {})
-        }; // fetch define o boundary
-      } else {
-        headers = { 'Content-Type': 'application/json', ...(typeof window !== 'undefined' && localStorage.getItem('token') ? { 'Authorization': `Bearer ${localStorage.getItem('token')}` } : {}) };
-        body = JSON.stringify(formData);
+        // primeiro sobe no Worker
+        const res = await fetch(`${WORKER_BASE}/api/upload`, {
+          method: 'POST',
+          headers: { 'content-type': bannerFile.type || 'application/octet-stream', 'x-filename': bannerFile.name || `banner-${Date.now()}` },
+          body: bannerFile
+        });
+        const dataUp = await res.json();
+        if (!res.ok || !dataUp?.url) throw new Error(dataUp?.error || 'Falha no upload do banner');
+        bannerUrl = dataUp.url;
       }
 
-      const response = await fetch(`${API_BASE}/api/collections/create`, {
-        method: 'POST',
-        headers,
-        body
-      });
+      const payload = { name: formData.name, description: formData.description || '', banner_image: bannerUrl || null };
+      const headers = { 'Content-Type': 'application/json', ...(typeof window !== 'undefined' && localStorage.getItem('token') ? { 'Authorization': `Bearer ${localStorage.getItem('token')}` } : {}) };
 
+      const response = await fetch(`${API_BASE}/api/collections/create`, { method: 'POST', headers, body: JSON.stringify(payload) });
       const data = await response.json();
 
       if (data.success) {
@@ -344,8 +337,8 @@ function CollectionModal({ isOpen, onClose, onSelect }) {
       } else {
         setError(data.message || 'Erro ao criar coleção');
       }
-    } catch {
-      setError('Erro ao conectar com o servidor');
+    } catch (err) {
+      setError(err?.message || 'Erro ao conectar com o servidor');
     } finally {
       setLoading(false);
     }
