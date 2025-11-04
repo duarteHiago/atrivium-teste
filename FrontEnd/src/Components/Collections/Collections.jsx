@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import CollectionModal from '../CollectionModal/CollectionModal';
+import { API_BASE } from '../../config/api';
 
 const Container = styled.div`
   max-width: 1400px;
@@ -159,6 +160,12 @@ const CollectionName = styled.h3`
   gap: 8px;
 `;
 
+const CreatorLine = styled.div`
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.9em;
+  margin: -4px 0 10px;
+`;
+
 const VerifiedBadge = styled.span`
   color: #2e7cf6;
   font-size: 0.8em;
@@ -252,14 +259,20 @@ function Collections() {
     setError(null);
 
     try {
-      const userId = localStorage.getItem('creatorId');
-      let url = 'http://localhost:3001/api/collections/list';
+      let url = `${API_BASE}/api/collections/list`;
       
       if (filter === 'featured') {
         url += '?featured=true';
+      } else if (filter === 'mine') {
+        url += '?mine=true';
       }
 
-      const response = await fetch(url);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const response = await fetch(url, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
       const data = await response.json();
 
       if (!response.ok) {
@@ -268,15 +281,10 @@ function Collections() {
 
       let filteredCollections = data.collections || [];
 
-      // Filtro adicional no frontend para "minhas coleções"
-      if (filter === 'mine' && userId) {
-        filteredCollections = filteredCollections.filter(c => c.creator_id === userId);
-      }
-
       setCollections(filteredCollections);
       
       // Calcular estatísticas
-      const nftCount = filteredCollections.reduce((sum, c) => sum + (c.nft_count || 0), 0);
+  const nftCount = filteredCollections.reduce((sum, c) => sum + (c.nfts_count || 0), 0);
       const volume = filteredCollections.reduce((sum, c) => sum + parseFloat(c.total_volume || 0), 0);
       
       setTotalNFTs(nftCount);
@@ -378,11 +386,19 @@ function Collections() {
         {collections.map((collection) => (
           <CollectionCard key={collection.collection_id} onClick={() => navigate(`/collections/${collection.collection_id}`)}>
             <BannerImage $imageUrl={collection.banner_image} />
+            {collection.total_favorites > 0 && (
+              <FavoriteBadge>
+                <span>❤️</span> {collection.total_favorites}
+              </FavoriteBadge>
+            )}
             <CollectionInfo>
               <CollectionName>
                 {collection.name}
                 {collection.is_featured && <VerifiedBadge>✓</VerifiedBadge>}
               </CollectionName>
+              <CreatorLine>
+                {collection.creator_name ? `por ${collection.creator_name}` : (collection.creator_cpf ? `por ${collection.creator_cpf}` : '')}
+              </CreatorLine>
               <CollectionDescription>
                 {collection.description || 'Sem descrição'}
               </CollectionDescription>
@@ -390,7 +406,7 @@ function Collections() {
               <CollectionStats>
                 <CollectionStat>
                   <StatName>Items</StatName>
-                  <StatValueSmall>{collection.nft_count || 0}</StatValueSmall>
+                  <StatValueSmall>{collection.nfts_count || 0}</StatValueSmall>
                 </CollectionStat>
                 <CollectionStat>
                   <StatName>Floor</StatName>
@@ -416,3 +432,26 @@ function Collections() {
 }
 
 export default Collections;
+
+const FavoriteBadge = styled.div`
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 6px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  z-index: 2;
+  
+  span {
+    color: #ff4b64;
+  }
+`;

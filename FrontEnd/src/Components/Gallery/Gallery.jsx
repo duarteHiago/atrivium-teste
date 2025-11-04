@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
+import { useNavigate } from 'react-router-dom';
 import { API_BASE } from '../../config/api';
 
 const Container = styled.div`
@@ -35,6 +36,7 @@ const Card = styled.div`
   overflow: hidden;
   background: rgba(30, 30, 31, 0.8);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
 
   &:hover {
     transform: translateY(-5px);
@@ -89,6 +91,7 @@ const Badge = styled.span`
 `;
 
 export default function Gallery() {
+  const navigate = useNavigate();
   const [nfts, setNfts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -140,7 +143,7 @@ export default function Gallery() {
             const isOwner = nft.current_owner_id === userId;
 
             return (
-              <Card key={nft.nft_id}>
+              <Card key={nft.nft_id} onClick={() => navigate(`/nft/${nft.nft_id}`)}>
                 <CardImg src={nft.image_url} alt={nft.name || 'NFT'} />
                 <CardBody>
                   <CardTitle>{nft.name || 'NFT sem nome'}</CardTitle>

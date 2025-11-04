@@ -1,6 +1,8 @@
 const aiService = require('../services/ai.service');
 const tokenizationService = require('../services/tokenization.service');
+const ipfsService = require('../services/ipfs.service');
 const path = require('path');
+const fs = require('fs');
 
 /**
  * Controller para operações de NFT
@@ -96,13 +98,47 @@ class NFTController {
       // Gera token ID único
       const tokenId = tokenizationService.generateTokenId();
 
-      // Salva a imagem no disco
+      // Salva a imagem temporariamente no disco (para fazer upload no IPFS)
       const filename = `${tokenId}.png`;
       const filepath = await aiService.saveImage(imageBuffer, filename);
-      const imageUrl = `/uploads/${filename}`; // URL relativa
 
-      // Normaliza creatorId (opcional). Se vier vazio/undefined, mantém null
-      const creatorIdValue = creatorId && String(creatorId).trim() !== '' ? creatorId : null;
+        // Normaliza creatorId (opcional). Se vier vazio/undefined, mantém null
+        const creatorIdValue = creatorId && String(creatorId).trim() !== '' ? creatorId : null;
+
+      let imageUrl;
+      let ipfsHash = null;
+
+      // Tenta fazer upload para IPFS se configurado
+      if (ipfsService.isConfigured()) {
+        try {
+          console.log('📤 Fazendo upload para IPFS via Pinata...');
+          
+          const ipfsResult = await ipfsService.uploadFile(filepath, {
+            name: name,
+            description: description,
+            tokenId: tokenId,
+            creator: creatorIdValue || 'anonymous',
+            type: 'nft-image'
+          });
+
+          ipfsHash = ipfsResult.ipfsHash;
+          imageUrl = ipfsResult.ipfsUrl;
+
+          console.log(`✅ Imagem armazenada no IPFS: ${ipfsHash}`);
+          console.log(`🌐 URL pública: ${imageUrl}`);
+
+          // Remove arquivo local após upload bem-sucedido (opcional)
+          // fs.unlinkSync(filepath);
+
+        } catch (ipfsError) {
+          console.error('⚠️  Erro ao fazer upload para IPFS:', ipfsError.message);
+          console.log('💾 Usando armazenamento local como fallback...');
+          imageUrl = `/uploads/${filename}`; // URL relativa local
+        }
+      } else {
+        console.log('💾 IPFS não configurado. Usando armazenamento local...');
+        imageUrl = `/uploads/${filename}`; // URL relativa local
+      }
 
       // Gera certificado digital
       const certificate = tokenizationService.generateCertificate({
@@ -129,10 +165,10 @@ class NFTController {
       const insertQuery = `
         INSERT INTO nfts (
           token_id, name, description, prompt, style,
-          image_hash, certificate_hash, image_url,
+          image_hash, certificate_hash, image_url, ipfs_hash,
           metadata, creator_id, current_owner_id,
           network, status, is_verified
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING *
       `;
 
@@ -145,10 +181,11 @@ class NFTController {
         imageHash,
         certificate.certificateHash,
         imageUrl,
+        ipfsHash, // IPFS hash
         JSON.stringify(metadata),
         creatorIdValue,
         creatorIdValue, // Owner inicial é o creator (se fornecido)
-        'off-chain',
+        ipfsHash ? 'ipfs' : 'off-chain', // Network baseado em IPFS
         'created',
         true
       ];
@@ -175,14 +212,16 @@ class NFTController {
             name: nft.name,
             description: nft.description,
             imageUrl: nft.image_url,
+            ipfsHash: nft.ipfs_hash,
             imageHash: nft.image_hash,
             status: nft.status,
+            network: nft.network,
             createdAt: nft.created_at
           },
           certificate,
           metadata
         },
-        message: 'NFT criado com sucesso!'
+        message: ipfsHash ? 'NFT criado e armazenado no IPFS com sucesso!' : 'NFT criado com sucesso!'
       });
 
     } catch (error) {

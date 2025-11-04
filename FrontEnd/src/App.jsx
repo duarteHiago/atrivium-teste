@@ -4,7 +4,7 @@ import styled from 'styled-components'
 import BarraSuperior from './Components/BarraSuperior';
 import BarraLateral from './Components/BarraLateral';
 import Cms from './Components/Cms/Cms';
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 
 // 1. Importe os novos componentes
 import Modal from './Components/Modal/Modal';
@@ -19,6 +19,17 @@ import Profile from './Components/User/Profile';
 import Settings from './Components/User/Settings';
 import Collections from './Components/Collections/Collections';
 import CollectionDetail from './Components/Collections/CollectionDetail';
+import Marketplace from './Components/Marketplace/Marketplace';
+import ProtectedRoute from './Components/ProtectedRoute/ProtectedRoute';
+import NftDetail from './Components/NftDetail/NftDetail';
+import FavoriteButton from './Components/FavoriteButton/FavoriteButton';
+import PublicProfile from './Components/User/PublicProfile';
+import { API_BASE } from './config/api';
+import Activity from './Components/Activity/Activity';
+import IPFSManager from './Pages/IPFSManager';
+import usePinataAutoInit from './hooks/usePinataAutoInit';
+import NFTMergedService from './services/nftMerged.service';
+import Badge from './Components/Badge';
 
 // 2. ATUALIZE OS ESTILOS PARA O EFEITO DE BLUR
 // Adiciona 'filter' e 'transition' quando um modal está aberto
@@ -56,6 +67,7 @@ const HeroPlaceholder = styled.div`
 const Section = styled.section`
   padding: 32px 24px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: visible; /* Permite que a animação ultrapasse os limites */
 `;
 
 const SectionTitle = styled.h2`
@@ -70,6 +82,7 @@ const CardRow = styled.div`
   gap: 20px;
   overflow-x: auto;
   padding-bottom: 15px;
+  padding-top: 20px; /* Espaço para a animação não ser cortada */
 
   &::-webkit-scrollbar {
     display: none;
@@ -85,12 +98,46 @@ const NftCard = styled.div`
   min-width: 280px;
   max-width: 280px;
   overflow: hidden;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  position: relative;
+  transform-style: preserve-3d;
+  perspective: 1000px;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+      135deg,
+      rgba(102, 126, 234, 0.1) 0%,
+      rgba(118, 75, 162, 0.1) 100%
+    );
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    border-radius: 12px;
+    pointer-events: none;
+  }
 
   &:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
-  }`
+    transform: translateY(-12px) rotateX(5deg) scale(1.02);
+    box-shadow: 
+      0 20px 40px rgba(0, 0, 0, 0.4),
+      0 0 20px rgba(102, 126, 234, 0.3);
+    border-color: rgba(102, 126, 234, 0.5);
+  }
+
+  &:hover::before {
+    opacity: 1;
+  }
+
+  &:active {
+    transform: translateY(-8px) rotateX(2deg) scale(1.01);
+  }
+`
 
 const CardImagePlaceholder = styled.div`
   width: 100%;
@@ -108,6 +155,15 @@ const CardImage = styled.img`
 
 const CardInfo = styled.div`
   padding: 16px;
+`;
+
+const CardFooter = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 `;
 
 const CardTitle = styled.h3`
@@ -136,6 +192,8 @@ const PlaceholderText = styled.div`
 
 
 function App() {
+  // Inicializa sincronização automática do Pinata
+  usePinataAutoInit();
 
   // --- NOVOS ESTADOS GLOBAIS ---
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -146,9 +204,11 @@ function App() {
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false); // Menu do perfil
   const [recentNfts, setRecentNfts] = useState([]);
   const [loadingNfts, setLoadingNfts] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0); // Key para forçar refresh
   
   const menuRef = useRef(null);
   const sidebarRef = useRef(null);
+  const location = useLocation();
   
   // Variável para o efeito de blur
   const isAnyModalOpen = isLoginModalOpen || isWalletModalOpen;
@@ -192,13 +252,31 @@ function App() {
     } catch {
       /* ignore */
     }
-    setIsLoginModalOpen(false)
+    setIsLoginModalOpen(false);
+    
+    // Se estiver na página Discover, recarregar NFTs
+    if (location.pathname === '/') {
+      setRefreshKey(prev => prev + 1);
+    }
   };
   
   // Lógica de Logout
   const handleLogout = () => {
+    // Limpar dados do localStorage
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('role');
+    localStorage.removeItem('userId');
+    
     setIsLoggedIn(false);
+    setIsAdmin(false);
     setIsProfileDropdownOpen(false);
+    
+    // Recarregar a página atual para limpar dados do usuário
+    setRefreshKey(prev => prev + 1);
+    
+    // Redirecionar para home
+    navigate('/');
   };
 
   // Router navigation (usado por openCms)
@@ -238,37 +316,60 @@ function App() {
 
   // Inicializa estado de login/admin baseado no localStorage (melhor UX)
   useEffect(() => {
-    try {
-      const token = localStorage.getItem('token');
-      const role = localStorage.getItem('role');
-      if (token) {
-        setIsLoggedIn(true);
-        setIsAdmin(role === 'admin');
+    const checkAuth = () => {
+      try {
+        const token = localStorage.getItem('token');
+        const role = localStorage.getItem('role');
+        if (token) {
+          setIsLoggedIn(true);
+          setIsAdmin(role === 'admin');
+        } else {
+          setIsLoggedIn(false);
+          setIsAdmin(false);
+        }
+      } catch {
+        setIsLoggedIn(false);
+        setIsAdmin(false);
       }
-    } catch {
-      /* ignore */
-    }
+    };
+    
+    checkAuth();
   }, []);
 
-  // Buscar NFTs recentes do backend
+  // Buscar NFTs recentes mesclados (regulares + Pinata)
   useEffect(() => {
     const fetchRecentNfts = async () => {
       try {
-        const response = await fetch('http://localhost:3001/api/leonardo/list');
-        const data = await response.json();
-        if (data.success) {
-          // Pegar apenas os 5 mais recentes
-          setRecentNfts(data.nfts.slice(0, 5));
-        }
+        const mergedNfts = await NFTMergedService.getRecentNFTs(8); // 8 NFTs para ter mais variedade
+        setRecentNfts(mergedNfts.slice(0, 5)); // Mostrar apenas 5 na tela
       } catch (error) {
-        console.error('Erro ao buscar NFTs recentes:', error);
+        console.error('Erro ao buscar NFTs recentes mesclados:', error);
+        // Fallback para método antigo
+        try {
+          const response = await fetch(`${API_BASE}/api/leonardo/list`);
+          const data = await response.json();
+          if (data.success) {
+            setRecentNfts(data.nfts.slice(0, 5));
+          }
+        } catch (fallbackError) {
+          console.error('Erro no fallback:', fallbackError);
+        }
       } finally {
         setLoadingNfts(false);
       }
     };
     
     fetchRecentNfts();
-  }, []);
+  }, [refreshKey]); // Recarrega quando refreshKey muda
+
+  // Detectar quando voltar para a página Discover (/)
+  useEffect(() => {
+    if (location.pathname === '/') {
+      // Forçar refresh dos NFTs
+      setLoadingNfts(true);
+      setRefreshKey(prev => prev + 1);
+    }
+  }, [location.pathname]);
 
   const placeholderItems = [1, 2, 3, 4, 5];
 
@@ -310,12 +411,37 @@ function App() {
         <MainContent $isSidebarOpen={isSidebarOpen}>
           <Routes>
             <Route path="/admin" element={<Cms onClose={closeCms} />} />
-            <Route path="/profile" element={<Profile onRequireLogin={() => setIsLoginModalOpen(true)} />} />
-            <Route path="/settings" element={<Settings onRequireLogin={() => setIsLoginModalOpen(true)} />} />
+            <Route path="/profile" element={
+              <ProtectedRoute requireAuth={true} onRequireLogin={() => setIsLoginModalOpen(true)}>
+                <Profile onRequireLogin={() => setIsLoginModalOpen(true)} />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings" element={
+              <ProtectedRoute requireAuth={true} onRequireLogin={() => setIsLoginModalOpen(true)}>
+                <Settings onRequireLogin={() => setIsLoginModalOpen(true)} />
+              </ProtectedRoute>
+            } />
+            <Route path="/users/:id" element={<PublicProfile />} />
             <Route path="/create-nft" element={<CreateNFT />} />
             <Route path="/gallery" element={<NftGallery />} />
-            <Route path="/collections" element={<Collections />} />
+            <Route path="/marketplace" element={<Marketplace />} />
+            <Route path="/collections" element={
+              <ProtectedRoute requireAuth={true} onRequireLogin={() => setIsLoginModalOpen(true)}>
+                <Collections />
+              </ProtectedRoute>
+            } />
+            <Route path="/activity" element={
+              <ProtectedRoute requireAuth={true} onRequireLogin={() => setIsLoginModalOpen(true)}>
+                <Activity />
+              </ProtectedRoute>
+            } />
+            <Route path="/ipfs" element={
+              <ProtectedRoute requireAuth={true} onRequireLogin={() => setIsLoginModalOpen(true)}>
+                <IPFSManager />
+              </ProtectedRoute>
+            } />
             <Route path="/collections/:id" element={<CollectionDetail />} />
+            <Route path="/nft/:id" element={<NftDetail />} />
             <Route path="/" element={(
               <>
                 {/* ... (Todo o seu conteúdo da página Discover) ... */}
@@ -340,13 +466,33 @@ function App() {
                     ) : recentNfts.length > 0 ? (
                       // Mostra os NFTs reais
                       recentNfts.map((nft) => (
-                        <NftCard key={nft.nft_id}>
+                        <NftCard key={nft.nft_id} onClick={(e) => {
+                          // Evita navegação se clicar no botão de favorito
+                          if (e.target.closest('button')) return;
+                          navigate(`/nft/${nft.nft_id}`);
+                        }}>
+                          {nft.isIPFS && <Badge variant="ipfs">IPFS</Badge>}
                           <CardImage src={nft.image_url} alt={nft.name || 'NFT'} />
                           <CardInfo>
                             <CardTitle>{nft.name || 'NFT sem nome'}</CardTitle>
                             <CardDescription>
                               {nft.description || nft.prompt || 'Gerado com IA'}
                             </CardDescription>
+                            <CardFooter>
+                              <div style={{ fontSize: '0.85em', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: '2px' }}
+                                onClick={(e) => { e.stopPropagation(); navigate(`/users/${nft.creator_id}`); }}>
+                                Por {nft.creator_name || 'Desconhecido'}
+                              </div>
+                              <div onClick={(e) => e.stopPropagation()}>
+                                <FavoriteButton 
+                                  nftId={nft.nft_id}
+                                  initialCount={nft.favorites_count || 0}
+                                  initialIsFavorited={nft.is_favorited || false}
+                                  showCount={true}
+                                  compact={true}
+                                />
+                              </div>
+                            </CardFooter>
                           </CardInfo>
                         </NftCard>
                       ))
@@ -364,6 +510,7 @@ function App() {
                     )}
                   </CardRow>
                 </Section>
+                
                 <Section>
                   <SectionTitle>Trending Tokens</SectionTitle>
                    <CardRow>

@@ -7,6 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
 dist
 dist-ssr
@@ -23,6 +24,54 @@ dist-ssr
 *.sln
 *.sw?
 
-# Variáveis de ambiente
-**/backend/.env
+# Variáveis de Ambiente (Ignora arquivos locais, commita o .env.example)
+config/environments/.env.development
+config/environments/.env.staging
+config/environments/.env.production
+config/environments/.env.test
+
+# Arquivos .env legados (se ainda existirem)
 BackEnd/.env
+FrontEnd/.env
+
+# Uploads e arquivos temporários
+BackEnd/uploads/**/*.png
+BackEnd/uploads/**/*.jpg
+BackEnd/uploads/**/*.jpeg
+BackEnd/uploads/**/*.gif
+BackEnd/uploads/**/*.webp
+BackEnd/uploads/**/*.svg
+!BackEnd/uploads/**/.gitkeep
+
+# Build artifacts
+build/
+*.tgz
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Database Data (gerado pelo Docker)
+DataBase/postgres-data/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Package manager
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# IDEs
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

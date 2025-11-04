@@ -27,6 +27,8 @@ services:
       context: ../BackEnd
       dockerfile: ../Docker/BackEnd/Dockerfile
     container_name: atrivium-backend
+    env_file:
+      - ../config/environments/.env.development
     environment:
       - PORT=3001
       - DB_HOST=postgres  # Nome do serviço postgres
@@ -56,6 +58,7 @@ services:
     container_name: atrivium-frontend
     environment:
       - NODE_ENV=development
+      - VITE_API_BASE_URL=http://localhost:3001
     ports:
       - '5173:5173'
     restart: unless-stopped

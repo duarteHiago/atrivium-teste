@@ -7,18 +7,21 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "axios": "^1.13.0",
+    "axios": "^1.13.1",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "form-data": "^4.0.4",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "pg": "^8.16.3",
+    "pinata-web3": "^0.5.4",
     "sharp": "^0.34.4",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "ngrok": "^5.0.0-beta.2",
     "nodemon": "^3.1.10"
   },
@@ -26,6 +29,9 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "ngrok": "node start-with-ngrok.js"
+    "ngrok": "node start-with-ngrok.js",
+    "db:clean:soft": "cross-env DEV_CLEAN_CONFIRM=YES node scripts/dev-clean.js soft",
+    "db:clean:hard": "cross-env DEV_CLEAN_CONFIRM=YES node scripts/dev-clean.js hard",
+    "db:clean:full": "cross-env DEV_CLEAN_CONFIRM=YES node scripts/dev-clean.js full"
   }
 }

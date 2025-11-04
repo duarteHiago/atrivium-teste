@@ -4,6 +4,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
+const ipfsService = require('../services/ipfs.service');
 
 // Configuração do banco de dados
 const pool = new Pool({
@@ -251,14 +252,49 @@ router.post('/generate-and-save', async (req, res) => {
     const certificateHash = generateHash(imageHash + prompt);
     const tokenId = crypto.randomUUID();
 
+    // Tentar fazer upload para IPFS
+    let ipfsHash = null;
+    let finalImageUrl = imageData.url;
+    let network = 'off-chain';
+
+    try {
+      console.log('📤 Tentando enviar imagem para IPFS...');
+      
+      // Baixar a imagem primeiro
+      const axios = require('axios');
+      const imageResponse = await axios.get(imageData.url, { responseType: 'arraybuffer' });
+      const buffer = Buffer.from(imageResponse.data);
+      
+      // Upload do buffer para IPFS
+      const ipfsResult = await ipfsService.uploadBuffer(
+        buffer,
+        `${tokenId}.png`,
+        { 
+          name: name || `NFT - ${prompt.substring(0, 30)}`,
+          prompt: prompt,
+          createdAt: new Date().toISOString()
+        }
+      );
+      
+      ipfsHash = ipfsResult.ipfsHash;
+      finalImageUrl = ipfsService.getPublicUrl(ipfsHash);
+      network = 'ipfs';
+      
+      console.log(`✅ Imagem enviada para IPFS: ${ipfsHash}`);
+      console.log(`🔗 URL pública: ${finalImageUrl}`);
+    } catch (ipfsError) {
+      console.warn('⚠️ Erro ao enviar para IPFS (continuando com URL original):', ipfsError.message);
+      // Continua com a URL original do Leonardo
+    }
+
     // Salvar no banco de dados
     const insertQuery = `
       INSERT INTO nfts (
         token_id, name, description, prompt, style,
         image_hash, certificate_hash, image_url,
-        status, network,
+        status, network, ipfs_hash,
         creator_id, current_owner_id, collection_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *
     `;
 
@@ -270,9 +306,10 @@ router.post('/generate-and-save', async (req, res) => {
       style || 'default',
       imageHash,
       certificateHash,
-      imageData.url,
+      finalImageUrl,
       'created',
-      'off-chain',
+      network,
+      ipfsHash,
       userId,
       userId,
       collection_id || null
@@ -295,6 +332,8 @@ router.post('/generate-and-save', async (req, res) => {
         prompt: nft.prompt,
         imageHash: nft.image_hash,
         certificateHash: nft.certificate_hash,
+        ipfsHash: nft.ipfs_hash,
+        network: nft.network,
         createdAt: nft.created_at
       }
     });
@@ -313,21 +352,50 @@ router.post('/generate-and-save', async (req, res) => {
 router.get('/list', async (req, res) => {
   try {
     const { userId } = req.query;
+    const requestingUserId = getUserIdFromAuthHeader(req); // Para verificar se o user favoritou
     
     console.log('🔍 GET /list - userId recebido:', userId);
     
-    let query = 'SELECT nft_id, token_id, name, description, image_url, prompt, status, created_at, creator_id, collection_id FROM nfts';
+    let query = `
+      SELECT 
+        n.nft_id, 
+        n.token_id, 
+        n.name, 
+        n.description, 
+        n.image_url, 
+        n.prompt, 
+        n.status,
+        n.price,
+        n.current_owner_id,
+        n.created_at, 
+        n.creator_id, 
+        n.collection_id, 
+        c.name AS collection_name,
+        n.ipfs_hash, 
+        n.network,
+        n.style,
+        COALESCE(u.nickname, u.first_name || ' ' || u.last_name) as creator_name,
+        u.email as creator_email,
+        u.avatar_url as creator_avatar,
+        COUNT(DISTINCT f.favorite_id)::int as favorites_count,
+        ${requestingUserId ? `EXISTS(SELECT 1 FROM nft_favorites f2 WHERE f2.nft_id = n.nft_id AND f2.user_id = '${requestingUserId}')` : 'false'} as is_favorited
+      FROM nfts n
+      LEFT JOIN users u ON n.creator_id = u.user_id
+      LEFT JOIN collections c ON n.collection_id = c.collection_id
+      LEFT JOIN nft_favorites f ON n.nft_id = f.nft_id
+    `;
     let queryParams = [];
     
     if (userId) {
-      query += ' WHERE creator_id = $1';
+      query += ' WHERE n.creator_id = $1';
       queryParams.push(userId);
       console.log('✅ Filtrando por creator_id:', userId);
     } else {
       console.log('⚠️ Nenhum userId fornecido, retornando todos os NFTs');
     }
     
-    query += ' ORDER BY created_at DESC';
+  query += ' GROUP BY n.nft_id, u.nickname, u.first_name, u.last_name, u.email, u.avatar_url, c.name';
+    query += ' ORDER BY n.created_at DESC';
     
     console.log('📝 Query SQL:', query);
     console.log('📝 Parâmetros:', queryParams);
@@ -356,9 +424,25 @@ router.get('/list', async (req, res) => {
 router.get('/:nftId', async (req, res) => {
   try {
     const { nftId } = req.params;
+    const requestingUserId = getUserIdFromAuthHeader(req);
 
     const result = await pool.query(
-      'SELECT * FROM nfts WHERE nft_id = $1 OR token_id = $1',
+      `SELECT 
+        n.*,
+        COALESCE(creator.nickname, creator.first_name || ' ' || creator.last_name) as creator_name,
+        creator.avatar_url as creator_avatar,
+        COALESCE(owner.nickname, owner.first_name || ' ' || owner.last_name) as owner_name,
+        owner.avatar_url as owner_avatar,
+        c.name AS collection_name,
+        COUNT(DISTINCT f.favorite_id)::int as favorites_count,
+        ${requestingUserId ? `EXISTS(SELECT 1 FROM nft_favorites f2 WHERE f2.nft_id = n.nft_id AND f2.user_id = '${requestingUserId}')` : 'false'} as is_favorited
+      FROM nfts n
+      LEFT JOIN users creator ON n.creator_id = creator.user_id
+      LEFT JOIN users owner ON n.current_owner_id = owner.user_id
+      LEFT JOIN collections c ON n.collection_id = c.collection_id
+      LEFT JOIN nft_favorites f ON n.nft_id = f.nft_id
+      WHERE n.nft_id::text = $1 OR n.token_id = $1
+      GROUP BY n.nft_id, creator.nickname, creator.first_name, creator.last_name, creator.avatar_url, owner.nickname, owner.first_name, owner.last_name, owner.avatar_url, c.name`,
       [nftId]
     );
 
@@ -384,51 +468,13 @@ router.get('/:nftId', async (req, res) => {
   }
 });
 
-// Atualizar/definir a coleção de um NFT
+// Atualizar/definir a coleção de um NFT - DESABILITADO
+// NFTs só podem ser associados a coleções no momento da criação
 router.patch('/:nftId/collection', async (req, res) => {
-  try {
-    const { nftId } = req.params;
-    const { collection_id } = req.body; // pode ser null para remover
-    const userId = getUserIdFromAuthHeader(req);
-
-    // Buscar NFT
-    const nftRes = await pool.query(
-      `SELECT nft_id, token_id, creator_id, current_owner_id
-       FROM nfts
-       WHERE nft_id::text = $1 OR token_id = $1
-       LIMIT 1`,
-      [String(nftId)]
-    );
-
-    if (nftRes.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'NFT não encontrado' });
-    }
-
-    const nft = nftRes.rows[0];
-
-    // Autorização básica: se houver userId, deve ser criador ou dono atual
-    if (userId && userId !== nft.creator_id && userId !== nft.current_owner_id) {
-      return res.status(403).json({ success: false, message: 'Sem permissão para alterar este NFT' });
-    }
-
-    // Validar collection opcionalmente (se fornecida)
-    if (collection_id) {
-      const colRes = await pool.query('SELECT 1 FROM collections WHERE collection_id = $1', [collection_id]);
-      if (colRes.rows.length === 0) {
-        return res.status(400).json({ success: false, message: 'Coleção inválida' });
-      }
-    }
-
-    const upd = await pool.query(
-      'UPDATE nfts SET collection_id = $1, updated_at = NOW() WHERE nft_id = $2 RETURNING *',
-      [collection_id || null, nft.nft_id]
-    );
-
-    return res.json({ success: true, message: 'Coleção atualizada', nft: upd.rows[0] });
-  } catch (error) {
-    console.error('Erro ao atualizar coleção do NFT:', error);
-    res.status(500).json({ success: false, message: 'Erro ao atualizar coleção', error: error.message });
-  }
+  return res.status(403).json({ 
+    success: false, 
+    message: 'NFTs só podem ser associados a coleções no momento da criação. A coleção não pode ser alterada posteriormente.' 
+  });
 });
 
 module.exports = router;

@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     cep VARCHAR(9), -- CEP (formato XXXXX-XXX)
     address TEXT,
     gender VARCHAR(10), -- 'female', 'male'
+    role VARCHAR(20) DEFAULT 'user', -- 'user' ou 'admin'
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, -- Data de criação
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP -- Data da última atualização
 );
