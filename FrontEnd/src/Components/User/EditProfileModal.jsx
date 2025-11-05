@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import styled from 'styled-components';
-import { API_BASE } from '../../config/api';
+import { API_BASE, WORKER_BASE } from '../../config/api';
 
 const Wrap = styled.div`
   width: min(720px, 92vw);
@@ -95,8 +95,17 @@ export default function EditProfileModal({ initialUser, onClose, onSaved }) {
       fd.append('last_name', form.last_name);
       if (form.nickname) fd.append('nickname', form.nickname);
       if (form.bio) fd.append('bio', form.bio);
-      if (avatarFile) fd.append('avatar', avatarFile);
-      if (bannerFile) fd.append('banner', bannerFile);
+
+      async function uploadToWorker(file) {
+        const res = await fetch(`${WORKER_BASE}/api/upload`, {
+          method: 'POST', headers: { 'content-type': file.type || 'application/octet-stream', 'x-filename': file.name || `file-${Date.now()}` }, body: file
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.url) throw new Error(data?.error || 'Falha no upload');
+        return data.url;
+      }
+      if (avatarFile) { const url = await uploadToWorker(avatarFile); fd.append('avatar_url', url); }
+      if (bannerFile) { const url = await uploadToWorker(bannerFile); fd.append('banner_url', url); }
 
       const r = await fetch(`${API_BASE}/api/users/me`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` }, body: fd });
       const d = await r.json();

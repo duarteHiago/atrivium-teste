@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import CollectionModal from '../CollectionModal/CollectionModal';
+import { API_BASE } from '../../config/api';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const Container = styled.div`
   max-width: 1400px;
@@ -23,7 +25,7 @@ const Title = styled.h1`
 `;
 
 const Subtitle = styled.p`
-  color: rgba(255, 255, 255, 0.6);
+  color: ${props => props.theme.text.secondary};
   font-size: 1.2em;
   margin-bottom: 20px;
 `;
@@ -41,14 +43,14 @@ const StatItem = styled.div`
 `;
 
 const StatLabel = styled.span`
-  color: rgba(255, 255, 255, 0.5);
+  color: ${props => props.theme.text.secondary};
   font-size: 0.9em;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 `;
 
 const StatValue = styled.span`
-  color: white;
+  color: ${props => props.theme.text.primary};
   font-size: 1.5em;
   font-weight: 600;
 `;
@@ -70,10 +72,10 @@ const FilterButtons = styled.div`
 
 const FilterButton = styled.button`
   padding: 10px 20px;
-  background: ${props => props.$active ? 'rgba(102, 126, 234, 0.2)' : 'rgba(255, 255, 255, 0.05)'};
-  border: 1px solid ${props => props.$active ? '#667eea' : 'rgba(255, 255, 255, 0.1)'};
+  background: ${props => props.$active ? 'rgba(102, 126, 234, 0.2)' : (props.theme.mode === 'light' ? 'rgba(0,0,0,0.05)' : 'rgba(255, 255, 255, 0.05)')};
+  border: 1px solid ${props => props.$active ? '#667eea' : (props.theme.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255, 255, 255, 0.1)')};
   border-radius: 8px;
-  color: ${props => props.$active ? '#667eea' : 'rgba(255, 255, 255, 0.7)'};
+  color: ${props => props.$active ? '#667eea' : props.theme.text.secondary};
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -111,16 +113,16 @@ const Grid = styled.div`
 `;
 
 const CollectionCard = styled.div`
-  background: rgba(30, 30, 31, 0.8);
+  background: ${props => props.theme.mode === 'light' ? '#f8f9fa' : 'rgba(30, 30, 31, 0.8)'};
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid ${props => props.theme.mode === 'light' ? 'rgba(0,0,0,0.15)' : 'rgba(255, 255, 255, 0.1)'};
   overflow: hidden;
   transition: all 0.3s;
   cursor: pointer;
 
   &:hover {
     transform: translateY(-8px);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 12px 32px ${props => props.theme.mode === 'light' ? 'rgba(0, 0, 0, 0.15)' : 'rgba(0, 0, 0, 0.4)'};
     border-color: #667eea;
   }
 `;
@@ -153,10 +155,16 @@ const CollectionInfo = styled.div`
 const CollectionName = styled.h3`
   font-size: 1.5em;
   margin: 0 0 8px 0;
-  color: white;
+  color: ${props => props.theme.text.primary};
   display: flex;
   align-items: center;
   gap: 8px;
+`;
+
+const CreatorLine = styled.div`
+  color: ${props => props.theme.text.secondary};
+  font-size: 0.9em;
+  margin: -4px 0 10px;
 `;
 
 const VerifiedBadge = styled.span`
@@ -165,7 +173,7 @@ const VerifiedBadge = styled.span`
 `;
 
 const CollectionDescription = styled.p`
-  color: rgba(255, 255, 255, 0.6);
+  color: ${props => props.theme.text.secondary};
   font-size: 0.95em;
   margin: 0 0 16px 0;
   display: -webkit-box;
@@ -180,7 +188,7 @@ const CollectionStats = styled.div`
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid ${props => props.theme.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255, 255, 255, 0.1)'};
 `;
 
 const CollectionStat = styled.div`
@@ -190,13 +198,13 @@ const CollectionStat = styled.div`
 `;
 
 const StatName = styled.span`
-  color: rgba(255, 255, 255, 0.5);
+  color: ${props => props.theme.text.secondary};
   font-size: 0.8em;
   text-transform: uppercase;
 `;
 
 const StatValueSmall = styled.span`
-  color: white;
+  color: ${props => props.theme.text.primary};
   font-weight: 600;
   font-size: 0.95em;
 `;
@@ -224,7 +232,7 @@ const Spinner = styled.div`
 const EmptyState = styled.div`
   text-align: center;
   padding: 80px 20px;
-  color: rgba(255, 255, 255, 0.5);
+  color: ${props => props.theme.text.secondary};
   font-size: 1.1em;
 `;
 
@@ -239,6 +247,7 @@ const ErrorMessage = styled.div`
 
 function Collections() {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const [collections, setCollections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -252,14 +261,20 @@ function Collections() {
     setError(null);
 
     try {
-      const userId = localStorage.getItem('creatorId');
-      let url = 'http://localhost:3001/api/collections/list';
+      let url = `${API_BASE}/api/collections/list`;
       
       if (filter === 'featured') {
         url += '?featured=true';
+      } else if (filter === 'mine') {
+        url += '?mine=true';
       }
 
-      const response = await fetch(url);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const response = await fetch(url, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
       const data = await response.json();
 
       if (!response.ok) {
@@ -268,15 +283,10 @@ function Collections() {
 
       let filteredCollections = data.collections || [];
 
-      // Filtro adicional no frontend para "minhas coleções"
-      if (filter === 'mine' && userId) {
-        filteredCollections = filteredCollections.filter(c => c.creator_id === userId);
-      }
-
       setCollections(filteredCollections);
       
       // Calcular estatísticas
-      const nftCount = filteredCollections.reduce((sum, c) => sum + (c.nft_count || 0), 0);
+  const nftCount = filteredCollections.reduce((sum, c) => sum + (c.nfts_count || 0), 0);
       const volume = filteredCollections.reduce((sum, c) => sum + parseFloat(c.total_volume || 0), 0);
       
       setTotalNFTs(nftCount);
@@ -315,20 +325,20 @@ function Collections() {
     <Container>
       <Header>
         <Title>📚 Collections</Title>
-        <Subtitle>Explore, crie e gerencie suas coleções de NFTs</Subtitle>
+        <Subtitle theme={theme}>Explore, crie e gerencie suas coleções de NFTs</Subtitle>
         
         <Stats>
           <StatItem>
-            <StatLabel>Total de Coleções</StatLabel>
-            <StatValue>{collections.length}</StatValue>
+          <StatLabel theme={theme}>Total de Coleções</StatLabel>
+          <StatValue theme={theme}>{collections.length}</StatValue>
           </StatItem>
           <StatItem>
-            <StatLabel>Total de NFTs</StatLabel>
-            <StatValue>{totalNFTs}</StatValue>
+          <StatLabel theme={theme}>Total de NFTs</StatLabel>
+          <StatValue theme={theme}>{totalNFTs}</StatValue>
           </StatItem>
           <StatItem>
-            <StatLabel>Volume Total</StatLabel>
-            <StatValue>{totalVolume.toFixed(2)} ETH</StatValue>
+          <StatLabel theme={theme}>Volume Total</StatLabel>
+          <StatValue theme={theme}>{totalVolume.toFixed(2)} ETH</StatValue>
           </StatItem>
         </Stats>
       </Header>
@@ -336,18 +346,21 @@ function Collections() {
       <ActionBar>
         <FilterButtons>
           <FilterButton 
+              theme={theme}
             $active={filter === 'all'}
             onClick={() => setFilter('all')}
           >
             Todas
           </FilterButton>
           <FilterButton 
+              theme={theme}
             $active={filter === 'mine'}
             onClick={() => setFilter('mine')}
           >
             Minhas Coleções
           </FilterButton>
           <FilterButton 
+              theme={theme}
             $active={filter === 'featured'}
             onClick={() => setFilter('featured')}
           >
@@ -367,7 +380,7 @@ function Collections() {
       )}
 
       {collections.length === 0 && !error && (
-        <EmptyState>
+          <EmptyState theme={theme}>
           {filter === 'mine'
             ? 'Você ainda não criou nenhuma coleção. Comece agora!'
             : 'Nenhuma coleção encontrada.'}
@@ -376,29 +389,37 @@ function Collections() {
 
       <Grid>
         {collections.map((collection) => (
-          <CollectionCard key={collection.collection_id} onClick={() => navigate(`/collections/${collection.collection_id}`)}>
+            <CollectionCard theme={theme} key={collection.collection_id} onClick={() => navigate(`/collections/${collection.collection_id}`)}>
             <BannerImage $imageUrl={collection.banner_image} />
+            {collection.total_favorites > 0 && (
+              <FavoriteBadge>
+                <span>❤️</span> {collection.total_favorites}
+              </FavoriteBadge>
+            )}
             <CollectionInfo>
-              <CollectionName>
+                <CollectionName theme={theme}>
                 {collection.name}
                 {collection.is_featured && <VerifiedBadge>✓</VerifiedBadge>}
               </CollectionName>
-              <CollectionDescription>
+                <CreatorLine theme={theme}>
+                {collection.creator_name ? `por ${collection.creator_name}` : (collection.creator_cpf ? `por ${collection.creator_cpf}` : '')}
+              </CreatorLine>
+                <CollectionDescription theme={theme}>
                 {collection.description || 'Sem descrição'}
               </CollectionDescription>
               
-              <CollectionStats>
+                <CollectionStats theme={theme}>
                 <CollectionStat>
-                  <StatName>Items</StatName>
-                  <StatValueSmall>{collection.nft_count || 0}</StatValueSmall>
+                    <StatName theme={theme}>Items</StatName>
+                    <StatValueSmall theme={theme}>{collection.nfts_count || 0}</StatValueSmall>
                 </CollectionStat>
                 <CollectionStat>
-                  <StatName>Floor</StatName>
-                  <StatValueSmall>{parseFloat(collection.floor_price || 0).toFixed(2)} ETH</StatValueSmall>
+                    <StatName theme={theme}>Floor</StatName>
+                    <StatValueSmall theme={theme}>{parseFloat(collection.floor_price || 0).toFixed(2)} ETH</StatValueSmall>
                 </CollectionStat>
                 <CollectionStat>
-                  <StatName>Volume</StatName>
-                  <StatValueSmall>{parseFloat(collection.total_volume || 0).toFixed(2)} ETH</StatValueSmall>
+                    <StatName theme={theme}>Volume</StatName>
+                    <StatValueSmall theme={theme}>{parseFloat(collection.total_volume || 0).toFixed(2)} ETH</StatValueSmall>
                 </CollectionStat>
               </CollectionStats>
             </CollectionInfo>
@@ -416,3 +437,26 @@ function Collections() {
 }
 
 export default Collections;
+
+const FavoriteBadge = styled.div`
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 6px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  z-index: 2;
+  
+  span {
+    color: #ff4b64;
+  }
+`;

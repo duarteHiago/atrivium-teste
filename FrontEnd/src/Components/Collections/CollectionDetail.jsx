@@ -1,22 +1,52 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
+import { API_BASE } from '../../config/api';
+import FavoriteButton from '../FavoriteButton/FavoriteButton';
+import EditCollectionModal from './EditCollectionModal';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const Container = styled.div`
   max-width: 1400px;
   margin: 0 auto;
   padding: 20px 30px 60px;
+  color: ${props => props.theme.text.primary};
 `;
 
 const BackButton = styled.button`
   background: transparent;
-  border: 1px solid rgba(255,255,255,0.15);
-  color: rgba(255,255,255,0.8);
+  border: 1px solid ${props => props.theme.mode === 'light' ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.15)'};
+  color: ${props => props.theme.mode === 'light' ? props.theme.text.secondary : 'rgba(255,255,255,0.85)'};
   padding: 10px 16px;
   border-radius: 8px;
   cursor: pointer;
   margin-bottom: 16px;
-  &:hover { border-color: rgba(255,255,255,0.3); }
+  &:hover { border-color: ${props => props.theme.mode === 'light' ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)'}; }
+`;
+
+const Actions = styled.div`
+  display: flex; gap: 10px; align-items: center; margin-left: auto;
+`;
+
+const ActionBtn = styled.button`
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid
+    ${props => props.$variant === 'danger'
+      ? 'rgba(239,68,68,0.4)'
+      : (props.theme.mode === 'light' ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.15)')};
+  color: ${props => props.$variant === 'danger'
+      ? '#ef4444'
+      : (props.theme.mode === 'light' ? props.theme.text.primary : '#fff')};
+  background: ${props => props.$variant === 'danger'
+      ? 'rgba(239,68,68,0.12)'
+      : (props.theme.mode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.08)')};
+  &:hover {
+    border-color: ${props => props.$variant === 'danger'
+      ? 'rgba(239,68,68,0.6)'
+      : (props.theme.mode === 'light' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.35)')};
+  }
 `;
 
 const Banner = styled.div`
@@ -44,6 +74,31 @@ const BannerContent = styled.div`
   padding: 0 20px;
   /* alinhamento horizontal com o avatar (120 + borda 8 + gap ~20 + padding 8) */
   padding-left: 156px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+`;
+
+const BannerLeft = styled.div`
+  flex: 1;
+`;
+
+const BannerRight = styled.div`
+  text-align: right;
+  padding-top: 4px;
+`;
+
+const CreatorLabel = styled.div`
+  font-size: 0.85em;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 4px;
+`;
+
+const CreatorName = styled.div`
+  font-size: 1.1em;
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 `;
 
 const Header = styled.div`
@@ -72,11 +127,12 @@ const Title = styled.h1`
   /* fonte menor para caber no banner mantendo alinhamento */
   font-size: 1.8em;
   line-height: 1.1;
+  color: #ffffff;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 `;
 
 const Description = styled.p`
-  color: rgba(255,255,255,0.7);
+  color: rgba(255,255,255,0.9);
   margin-top: 2px; /* encosta melhor entre título e base do banner */
   font-size: 0.9em; /* levemente menor para garantir que caiba */
   line-height: 1.1;
@@ -100,6 +156,7 @@ const StatsBelow = styled(Stats)`
   padding: 8px 0 0 0;
   margin-left: 156px; /* mesmo offset do BannerContent */
   position: relative;
+  z-index: 4; /* garantir que fique acima do banner/overlay */
   /* base dos stats alinhada à base do avatar */
   transform: translateY(calc(-100% - 8px));
 `;
@@ -109,11 +166,23 @@ const Stat = styled.div`
 `;
 
 const StatLabel = styled.span`
-  color: rgba(255,255,255,0.5); font-size: 0.8em;
+  color: ${props => props.$overlay
+    ? (props.theme.mode === 'light' ? '#000000' : 'rgba(255,255,255,0.95)')
+    : (props.theme.mode === 'light' ? props.theme.text.secondary : 'rgba(255,255,255,0.85)')};
+  font-size: 0.85em;
+  ${props => props.$overlay
+    ? (props.theme.mode === 'light' ? 'text-shadow: none;' : 'text-shadow: 0 2px 8px rgba(0,0,0,.6), 0 1px 3px rgba(0,0,0,.5);')
+    : ''}
 `;
 
 const StatValue = styled.span`
-  color: #fff; font-weight: 600;
+  color: ${props => props.$overlay
+    ? (props.theme.mode === 'light' ? '#000000' : '#ffffff')
+    : (props.theme.mode === 'light' ? props.theme.text.primary : '#ffffff')};
+  font-weight: 700;
+  ${props => props.$overlay
+    ? (props.theme.mode === 'light' ? 'text-shadow: none;' : 'text-shadow: 0 2px 10px rgba(0,0,0,.65), 0 1px 4px rgba(0,0,0,.55);')
+    : ''}
 `;
 
 const Grid = styled.div`
@@ -121,13 +190,53 @@ const Grid = styled.div`
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 20px;
   margin-top: 24px;
+  padding-top: 20px; /* Espaço para animação não ser cortada */
 `;
 
 const Card = styled.div`
-  background: rgba(30,30,31,0.8);
+  background: rgba(30,30,31,1);
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 12px;
   overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  position: relative;
+  transform-style: preserve-3d;
+  perspective: 1000px;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+      135deg,
+      rgba(102, 126, 234, 0.1) 0%,
+      rgba(118, 75, 162, 0.1) 100%
+    );
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    border-radius: 12px;
+    pointer-events: none;
+  }
+
+  &:hover {
+    transform: translateY(-12px) rotateX(5deg) scale(1.02);
+    box-shadow: 
+      0 20px 40px rgba(0, 0, 0, 0.4),
+      0 0 20px rgba(102, 126, 234, 0.3);
+    border-color: rgba(102, 126, 234, 0.5);
+  }
+
+  &:hover::before {
+    opacity: 1;
+  }
+
+  &:active {
+    transform: translateY(-8px) rotateX(2deg) scale(1.01);
+  }
 `;
 
 const Img = styled.img`
@@ -136,10 +245,47 @@ const Img = styled.img`
 
 const CardInfo = styled.div`
   padding: 12px;
+  color: #ffffff;
+`;
+
+const CardFooter = styled.div`
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  border-top: none; /* remove a linha do footer */
+  background: transparent;
+`;
+
+const FavoriteBadge = styled.div`
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 8px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  z-index: 2;
+  
+  span { color: #ff4b64; }
 `;
 
 const Loading = styled.div`
-  padding: 60px; text-align: center; color: rgba(255,255,255,0.8);
+  padding: 60px;
+  text-align: center;
+  color: ${props => props.theme.text.secondary};
 `;
 
 const ErrorBox = styled.div`
@@ -147,12 +293,24 @@ const ErrorBox = styled.div`
 `;
 
 function CollectionDetail() {
+  const { theme } = useTheme();
   const { id } = useParams();
   const navigate = useNavigate();
   const [collection, setCollection] = useState(null);
   const [nfts, setNfts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [editOpen, setEditOpen] = useState(false);
+
+  const canManage = useMemo(() => {
+    try {
+      const role = localStorage.getItem('role');
+      const me = localStorage.getItem('creatorId');
+      if (role === 'admin') return true;
+      if (collection?.creator_id && me && collection.creator_id === me) return true;
+    } catch { /* ignore */ }
+    return false;
+  }, [collection]);
 
   useEffect(() => {
     let active = true;
@@ -160,8 +318,8 @@ function CollectionDetail() {
       try {
         setLoading(true); setError(null);
         const [cRes, nRes] = await Promise.all([
-          fetch(`http://localhost:3001/api/collections/${id}`),
-          fetch(`http://localhost:3001/api/collections/${id}/nfts`)
+          fetch(`${API_BASE}/api/collections/${id}`),
+          fetch(`${API_BASE}/api/collections/${id}/nfts`)
         ]);
         const cData = await cRes.json();
         const nData = await nRes.json();
@@ -180,9 +338,9 @@ function CollectionDetail() {
     return () => { active = false; };
   }, [id]);
 
-  if (loading) return <Loading>Carregando coleção...</Loading>;
-  if (error) return <Container><BackButton onClick={() => navigate(-1)}>← Voltar</BackButton><ErrorBox>❌ {error}</ErrorBox></Container>;
-  if (!collection) return <Container><BackButton onClick={() => navigate(-1)}>← Voltar</BackButton><ErrorBox>Coleção não encontrada.</ErrorBox></Container>;
+  if (loading) return <Loading theme={theme}>Carregando coleção...</Loading>;
+  if (error) return <Container theme={theme}><BackButton theme={theme} onClick={() => navigate(-1)}>← Voltar</BackButton><ErrorBox>❌ {error}</ErrorBox></Container>;
+  if (!collection) return <Container theme={theme}><BackButton theme={theme} onClick={() => navigate(-1)}>← Voltar</BackButton><ErrorBox>Coleção não encontrada.</ErrorBox></Container>;
 
   const items = (collection.nft_count ?? nfts.length);
   const floor = parseFloat(collection.floor_price || 0);
@@ -191,15 +349,52 @@ function CollectionDetail() {
   const shortDesc = rawDesc.length > 100 ? rawDesc.slice(0, 100).trimEnd() + '…' : rawDesc;
 
   return (
-    <Container>
-      <BackButton onClick={() => navigate(-1)}>← Voltar</BackButton>
+    <Container theme={theme}>
+      <div style={{display:'flex',alignItems:'center',gap:12}}>
+        <BackButton theme={theme} onClick={() => navigate(-1)}>← Voltar</BackButton>
+        {canManage && (
+          <Actions>
+            <ActionBtn theme={theme} onClick={() => setEditOpen(true)}>✏️ Editar</ActionBtn>
+            <ActionBtn theme={theme} $variant="danger" onClick={async () => {
+              if (!window.confirm('Tem certeza que deseja excluir esta coleção? Esta ação não pode ser desfeita.')) return;
+              try {
+                const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+                const res = await fetch(`${API_BASE}/api/collections/${collection.collection_id}`, {
+                  method: 'DELETE',
+                  headers: {
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                  }
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.success === false) throw new Error(data.message || 'Falha ao excluir coleção');
+                navigate('/collections');
+              } catch (e) {
+                alert(e.message);
+              }
+            }}>🗑️ Excluir</ActionBtn>
+          </Actions>
+        )}
+      </div>
       <Banner $imageUrl={collection.banner_image}>
+        {collection.total_favorites > 0 && (
+          <FavoriteBadge>
+            <span>❤️</span> {collection.total_favorites}
+          </FavoriteBadge>
+        )}
         <BannerOverlay />
         <BannerContent>
-          <Title>{collection.name}</Title>
-          {collection.description && (
-            <Description title={rawDesc}>{shortDesc}</Description>
-          )}
+          <BannerLeft>
+            <Title>{collection.name}</Title>
+            {collection.description && (
+              <Description title={rawDesc}>{shortDesc}</Description>
+            )}
+          </BannerLeft>
+          <BannerRight>
+            <CreatorLabel>Criado por</CreatorLabel>
+            <CreatorName>
+              {collection.creator_name || collection.creator_cpf || 'Desconhecido'}
+            </CreatorName>
+          </BannerRight>
         </BannerContent>
       </Banner>
       <Header>
@@ -208,16 +403,16 @@ function CollectionDetail() {
 
       <StatsBelow>
         <Stat>
-          <StatLabel>Items</StatLabel>
-          <StatValue>{items}</StatValue>
+          <StatLabel $overlay>Items</StatLabel>
+          <StatValue $overlay>{items}</StatValue>
         </Stat>
         <Stat>
-          <StatLabel>Floor</StatLabel>
-          <StatValue>{floor.toFixed(2)} ETH</StatValue>
+          <StatLabel $overlay>Floor</StatLabel>
+          <StatValue $overlay>{floor.toFixed(2)} ETH</StatValue>
         </Stat>
         <Stat>
-          <StatLabel>Volume</StatLabel>
-          <StatValue>{volume.toFixed(2)} ETH</StatValue>
+          <StatLabel $overlay>Volume</StatLabel>
+          <StatValue $overlay>{volume.toFixed(2)} ETH</StatValue>
         </Stat>
       </StatsBelow>
 
@@ -226,16 +421,36 @@ function CollectionDetail() {
       ) : (
         <Grid>
           {nfts.map(nft => (
-            <Card key={nft.nft_id}>
-              <Img src={nft.image_url} alt={nft.name} />
+            <Card key={nft.nft_id} onClick={() => navigate(`/nft/${nft.nft_id}`)}>
+              <Img src={nft.image_url} alt={nft.name || 'NFT'} />
               <CardInfo>
-                <div style={{fontWeight:600}}>{nft.name}</div>
+                <div style={{fontWeight:600}}>{nft.name || 'Sem nome'}</div>
                 <div style={{opacity:.7, fontSize:'.9em'}}>{new Date(nft.created_at).toLocaleDateString('pt-BR')}</div>
               </CardInfo>
+              <CardFooter>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <FavoriteButton 
+                    nftId={nft.nft_id}
+                    initialCount={nft.favorites_count || 0}
+                    initialIsFavorited={nft.is_favorited || false}
+                    compact={true}
+                    showCount={true}
+                  />
+                </div>
+              </CardFooter>
             </Card>
           ))}
         </Grid>
       )}
+
+      <EditCollectionModal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        collection={collection}
+        onSaved={(updated) => {
+          setCollection(prev => ({ ...prev, ...(updated || {}) }));
+        }}
+      />
     </Container>
   );
 }

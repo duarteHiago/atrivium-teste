@@ -1,5 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
+// Tema: alternância desativada temporariamente
 
 // Container do dropdown
 const DropdownMenu = styled.div`
@@ -51,6 +52,7 @@ const MenuItem = styled.a`
   }
 `;
 
+
 const MenuSeparator = styled.hr`
   border: none;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -58,18 +60,18 @@ const MenuSeparator = styled.hr`
 `;
 
 const ProfileDropdown = ({ onLogout, onGoProfile, onGoSettings, onClose }) => {
+  
   return (
     <>
       <Backdrop onClick={onClose} />
       <DropdownMenu role="menu" aria-label="Profile menu">
   <MenuItem as="button" onClick={onGoProfile} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>Profile</MenuItem>
         <MenuItem as="button" onClick={() => { window.history.pushState({}, '', '/gallery'); window.dispatchEvent(new PopStateEvent('popstate')); }} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>Galleries</MenuItem>
-        <MenuItem href="#">NFTs</MenuItem>
-      <MenuItem href="#">Listings</MenuItem>
-      <MenuItem href="#">Portfolio</MenuItem>
+        {/* Itens removidos: NFTs, Listings, Portfolio */}
       <MenuSeparator />
-  <MenuItem as="button" onClick={onGoSettings} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>Settings</MenuItem>
-      <MenuItem href="#" onClick={onLogout}>
+      {/* Alternância de tema desativada temporariamente */}
+      <MenuItem as="button" onClick={onGoSettings} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>Settings</MenuItem>
+      <MenuItem as="button" onClick={(e) => { e.preventDefault(); onLogout(); }} style={{ textAlign: 'left', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer' }}>
         Sair (Logout)
       </MenuItem>
       </DropdownMenu>

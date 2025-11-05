@@ -1,127 +1,76 @@
-# ⚡ Setup Rápido - Docker + GitHub Secrets
+# ⚡ Setup Rápido - Atrivium (Ambiente Docker)
+
+Este guia usa os novos scripts de automação (`start.sh` e `close.sh`) e remove a necessidade do script PowerShell. Siga os passos *na ordem correta*.
 
 ## 🎯 O que você precisa fazer AGORA:
 
-### 1. Iniciar o PostgreSQL no Docker
+### 1. Obter sua Chave de API (Obrigatório)
 
-```powershell
-cd Docker
-docker-compose up -d
+Antes de iniciar, você precisa de uma chave de API para a geração de IA.
+
+1.  Acesse: https://huggingface.co/settings/tokens (Recomendado) ou https://app.leonardo.ai/settings
+2.  Crie um token (ex: `hf_...` ou `seu-token-leonardo...`).
+3.  Copie este token.
+
+### 2. Criar arquivo .env no Backend (Obrigatório)
+
+O backend precisa deste arquivo *antes* de iniciar pela primeira vez.
+
+1.  Navegue até a pasta `BackEnd`:
+    ```bash
+    cd BackEnd
+    ```
+2.  Copie o arquivo de exemplo para criar o seu `.env`:
+    ```bash
+    # Se estiver no Linux/Mac/Git Bash
+    cp .env.example .env
+    
+    # Se estiver no CMD (Windows)
+    copy .env.example .env
+    ```
+3.  Abra o novo arquivo `BackEnd/.env` e cole sua chave de API:
+
+    ```env
+    # ... (outras variáveis) ...
+    
+    # Cole sua chave aqui
+    LEONARDO_API_KEY=SEU_TOKEN_LEONARDO_AQUI
+    
+    # OU (se estiver usando Hugging Face)
+    # HUGGINGFACE_API_KEY=SEU_TOKEN_HUGGINGFACE_AQUI
+    ```
+4.  Volte para a raiz do projeto:
+    ```bash
+    cd ..
+    ```
+
+### 3. Dar Permissão aos Scripts (Apenas na primeira vez)
+
+No seu terminal (Linux, macOS ou Git Bash no Windows), dê permissão de execução:
+```bash
+chmod +x start.sh
+chmod +x close.sh
 ```
 
-### 2. Criar as tabelas no banco
+### 4. Iniciar TODO o Ambiente
+Agora você pode iniciar o projeto. Este comando fará tudo:
 
-**Opção A - Script Automático (Recomendado):**
-```powershell
-# Na raiz do projeto
-.\setup-database.ps1
-```
-
-**Opção B - Manual:**
-```powershell
-# Pegar ID do container
-docker ps
-
-# Executar os SQLs
-Get-Content .\DataBase\SQL\user.sql | docker exec -i <CONTAINER_ID> psql -U admin -d atrivium-database
-Get-Content .\DataBase\SQL\nfts.sql | docker exec -i <CONTAINER_ID> psql -U admin -d atrivium-database
-```
-
-### 3. Obter API Key do Hugging Face
-
-1. https://huggingface.co/ → Criar conta (GRATUITO)
-2. Settings → Access Tokens → New Token
-3. Nome: `atrivium-nft`, Type: Read
-4. Copiar token: `hf_xxxxxxxxxxxxxxxxxxxxx`
-
-### 4. Criar arquivo .env no Backend
-
-```powershell
-cd BackEnd
-copy .env.example .env
-```
-
-Edite o `.env` e cole seu token do Hugging Face:
-```env
-HUGGINGFACE_API_KEY=hf_xxxxxxxxxxxxxxxxxxxxx
-```
-
-As outras variáveis já estão corretas para o Docker!
-
-### 5. Iniciar Backend e Frontend
-
-**Terminal 1:**
-```powershell
-cd BackEnd
-npm run dev
-```
-
-**Terminal 2:**
-```powershell
-cd FrontEnd
-npm run dev
-```
-
-### 6. Testar!
-
-1. Abra http://localhost:5173
-2. Clique em **"+ Your NFT"**
-3. Crie seu primeiro NFT! 🎨
-
----
-
-## 🔐 GitHub Secrets (Para Deploy Futuro)
-
-Quando for fazer deploy/CI-CD, adicione no GitHub:
-
-**Settings → Secrets → New secret:**
+1. Subir os contêineres do Docker (Postgres, Backend, Frontend).
+2. Esperar o banco de dados ficar saudável.
+3. Criar as tabelas users e nfts automaticamente.
 
 ```
-HUGGINGFACE_API_KEY = hf_xxxxxxxxxxxxxxxxxxxxx
-DB_HOST = seu_host_producao
-DB_PORT = 5432
-DB_USER = seu_usuario
-DB_PASSWORD = sua_senha
-DB_DATABASE = atrivium-database
+./start.sh
 ```
 
----
+Após o script terminar, seu ambiente estará pronto! 
 
-## 📦 Comandos Úteis Docker
+Frontend: http://localhost:5173 <br>
+Backend: http://localhost:3001
 
-```powershell
-# Ver containers rodando
-docker ps
+### 5. Como Parar o Ambiente
+Para parar e remover todos os contêineres:
 
-# Ver logs do PostgreSQL
-docker logs <CONTAINER_ID>
-
-# Parar container
-docker-compose down
-
-# Reiniciar container
-docker-compose restart
-
-# Conectar ao PostgreSQL
-docker exec -it <CONTAINER_ID> psql -U admin -d atrivium-database
 ```
-
----
-
-## ✅ Checklist
-
-- [ ] Docker Desktop instalado e rodando
-- [ ] `docker-compose up -d` executado
-- [ ] Script `setup-database.ps1` rodou com sucesso
-- [ ] Conta Hugging Face criada
-- [ ] API Key copiada
-- [ ] Arquivo `BackEnd/.env` criado com o token
-- [ ] Backend iniciado (porta 3001)
-- [ ] Frontend iniciado (porta 5173)
-- [ ] Teste de criação de NFT funcionando
-
----
-
-**Pronto! Tudo configurado! 🚀**
-
-Veja documentação completa em: `docs/SETUP-DOCKER-SECRETS.md`
+./close.sh
+```
