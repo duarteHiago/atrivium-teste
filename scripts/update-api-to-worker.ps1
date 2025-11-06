@@ -15,7 +15,9 @@ $files = @(
 )
 
 foreach ($file in $files) {
-    $fullPath = Join-Path $PSScriptRoot $file
+    # Construct path relative to project root (one level up from scripts folder)
+    $projectRoot = Split-Path $PSScriptRoot -Parent
+    $fullPath = Join-Path $projectRoot $file
     if (Test-Path $fullPath) {
         Write-Host "Atualizando $file..." -ForegroundColor Green
         $content = Get-Content $fullPath -Raw

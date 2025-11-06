@@ -78,6 +78,19 @@ Script de atualização específico para detalhes de NFTs.
 
 ## Notas
 
+**IMPORTANTE:** Todos os scripts devem ser executados a partir da **raiz do projeto** para garantir que os caminhos relativos funcionem corretamente.
+
+Por exemplo:
+```bash
+# Correto - executar da raiz do projeto
+cd /caminho/para/atrivium-teste
+./scripts/start.sh
+
+# Incorreto - NÃO executar de dentro da pasta scripts
+cd /caminho/para/atrivium-teste/scripts
+./start.sh  # Isso pode falhar!
+```
+
 - Scripts `.sh` são para Linux/macOS/Git Bash
 - Scripts `.bat` são para Windows CMD
 - Scripts `.ps1` são para Windows PowerShell
