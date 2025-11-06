@@ -1,6 +1,6 @@
 # ⚡ Setup Rápido - Atrivium (Ambiente Docker)
 
-Este guia usa os novos scripts de automação (`start.sh` e `close.sh`) e remove a necessidade do script PowerShell. Siga os passos *na ordem correta*.
+Este guia usa os novos scripts de automação (`scripts/start.sh` e `scripts/close.sh`) e remove a necessidade do script PowerShell. Siga os passos *na ordem correta*.
 
 ## 🎯 O que você precisa fazer AGORA:
 
@@ -48,8 +48,8 @@ O backend precisa deste arquivo *antes* de iniciar pela primeira vez.
 
 No seu terminal (Linux, macOS ou Git Bash no Windows), dê permissão de execução:
 ```bash
-chmod +x start.sh
-chmod +x close.sh
+chmod +x scripts/start.sh
+chmod +x scripts/close.sh
 ```
 
 ### 4. Iniciar TODO o Ambiente
@@ -60,7 +60,7 @@ Agora você pode iniciar o projeto. Este comando fará tudo:
 3. Criar as tabelas users e nfts automaticamente.
 
 ```
-./start.sh
+./scripts/start.sh
 ```
 
 Após o script terminar, seu ambiente estará pronto! 
@@ -72,5 +72,5 @@ Backend: http://localhost:3001
 Para parar e remover todos os contêineres:
 
 ```
-./close.sh
+./scripts/close.sh
 ```

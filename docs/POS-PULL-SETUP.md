@@ -29,12 +29,12 @@ Execute no psql ou use o script auxiliar:
 
 ### Opção A - Via psql diretamente:
 ```powershell
-$env:PGPASSWORD="SUA_SENHA"; & "C:\Program Files\PostgreSQL\17\bin\psql.exe" -h localhost -p 5432 -U postgres -d atrivium-database -f "setup-atrivium-database.sql"
+$env:PGPASSWORD="SUA_SENHA"; & "C:\Program Files\PostgreSQL\17\bin\psql.exe" -h localhost -p 5432 -U postgres -d atrivium-database -f "DataBase\SQL\setup-atrivium-database.sql"
 ```
 
 ### Opção B - Via script .bat (mais fácil):
 ```powershell
-.\run-sql-scripts.bat
+.\scripts\run-sql-scripts.bat
 ```
 
 **Scripts aplicados:**
@@ -88,7 +88,7 @@ PINATA_GATEWAY=sapphire-added-junglefowl-919.mypinata.cloud
 ## 🐛 Troubleshooting:
 
 ### Erro: "relação nft_favorites não existe"
-**Solução:** Você não executou os scripts SQL. Execute `setup-atrivium-database.sql`
+**Solução:** Você não executou os scripts SQL. Execute `DataBase/SQL/setup-atrivium-database.sql`
 
 ### Erro: "Failed to fetch" no frontend
 **Solução:** Backend não está rodando ou porta errada. Verifique se PORT no `.env` bate com `api.js`
@@ -102,10 +102,10 @@ PINATA_GATEWAY=sapphire-added-junglefowl-919.mypinata.cloud
 
 ## 📦 Novos Arquivos Criados (já no Git):
 
-- ✅ `setup-atrivium-database.sql` - Aplica todos os scripts SQL
-- ✅ `clean-db.sql` - Limpa dados do banco
-- ✅ `run-sql-scripts.bat` - Script Windows para aplicar migrations
-- ✅ `start.bat` - Reinicia backend facilmente
+- ✅ `DataBase/SQL/setup-atrivium-database.sql` - Aplica todos os scripts SQL
+- ✅ `DataBase/SQL/clean-db.sql` - Limpa dados do banco
+- ✅ `scripts/run-sql-scripts.bat` - Script Windows para aplicar migrations
+- ✅ `scripts/start.bat` - Reinicia backend facilmente
 - ✅ `docs/ATUALIZACOES-PULL.md` - Documentação completa das mudanças
 
 ---

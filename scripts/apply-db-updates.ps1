@@ -12,7 +12,7 @@ Write-Host ""
 
 # Aplicar scripts SQL em ordem (incluindo extensoes)
 $scripts = @(
-    "00-extensions.sql",
+    "DataBase\SQL\00-extensions.sql",
     "DataBase\SQL\01-user.sql",
     "DataBase\SQL\02-nfts.sql",
     "DataBase\SQL\03-collections.sql",

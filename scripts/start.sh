@@ -1,6 +1,14 @@
 #!/bin/bash
 # Script para iniciar o ambiente de desenvolvimento completo do Atrivium
 
+# --- 0. Verificando se está na raiz do projeto ---
+if [ ! -f "README.md" ] || [ ! -d "Docker" ] || [ ! -d "BackEnd" ]; then
+    echo "❌ Erro: Este script deve ser executado da raiz do projeto."
+    echo "   Certifique-se de estar no diretório atrivium-teste/"
+    echo "   Uso correto: ./scripts/start.sh"
+    exit 1
+fi
+
 echo "🚀 Iniciando ambiente Atrivium (Dev)..."
 echo ""
 
@@ -71,4 +79,4 @@ echo ""
 echo "💡 Para ver os logs de todos os serviços, execute em outro terminal:"
 echo "   docker-compose -f Docker/docker-compose.yaml logs -f"
 echo ""
-echo "👉 Para parar tudo, execute: ./close.sh"
+echo "👉 Para parar tudo, execute: ./scripts/close.sh"
